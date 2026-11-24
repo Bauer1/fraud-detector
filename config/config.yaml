@@ -1,0 +1,86 @@
+project:
+  name: "AI Fraud Detection Agent"
+  random_seed: 42
+
+paths:
+  raw_data: "data/raw/transactions.parquet"
+  processed_data: "data/processed/features.parquet"
+  database_url: "sqlite:///data/fraud_agent.db"
+  artifacts_dir: "models/artifacts"
+  reports_dir: "reports"
+
+simulation:
+  n_customers: 600
+  n_merchants: 250
+  n_transactions: 30000
+  n_days: 30
+  fraud_rate: 0.015  # ~1.5% realistic imbalanced fraud rate
+
+split:
+  train_frac: 0.60
+  val_frac: 0.20
+  test_frac: 0.20
+
+rules:
+  hard_limit_amount: 250000.0
+  night_high_amount: 50000.0
+  night_hours: [0, 1, 2, 3, 4, 5]
+  max_tx_1h: 6
+  max_amount_1h: 100000.0
+  drain_ratio_threshold: 0.95
+  drain_min_amount: 15000.0
+  mule_in_degree_threshold: 5
+  shared_device_accounts_threshold: 3
+  blacklisted_accounts:
+    - "C_BLACKLIST_001"
+    - "C_BLACKLIST_002"
+    - "M_BLACKLIST_999"
+  blacklisted_devices:
+    - "DEV_BLACK_001"
+    - "DEV_BLACK_002"
+
+model:
+  lgbm_params:
+    n_estimators: 250
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+    min_child_samples: 30
+    subsample: 0.8
+    colsample_bytree: 0.8
+    class_weight: "balanced"
+    random_state: 42
+  isolation_forest:
+    n_estimators: 150
+    contamination: 0.02
+    max_samples: 512
+    random_state: 42
+
+agent:
+  weights:
+    ml_score: 0.65
+    rule_score: 0.25
+    anomaly_score: 0.10
+  # Initial fallback thresholds (overridden by cost-optimized thresholds after training)
+  thresholds:
+    otp: 0.30
+    review: 0.55
+    block: 0.80
+  costs:
+    otp_cost: 2.0               # Customer friction + SMS/push cost
+    review_cost: 25.0           # Analyst time cost per manual review
+    false_block_cost: 150.0     # Customer churn/friction cost on legitimate block
+    otp_fraud_catch_rate: 0.70  # Fraction of fraud stopped by OTP challenge
+    review_fraud_catch_rate: 0.92
+    block_fraud_catch_rate: 1.00
+
+monitoring:
+  psi_warning_threshold: 0.10
+  psi_critical_threshold: 0.25
+  psi_bins: 10
+
+llm:
+  enabled: false                # Set true + OPENAI_API_KEY env var for live LLM summaries
+  model: "gpt-4o-mini"
+  api_base: "https://api.openai.com/v1"
+  timeout_seconds: 10

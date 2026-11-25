@@ -1,0 +1,12 @@
+{
+  "candidate_version": "model-paysim-v001-20261125T140942Z",
+  "champion_version": null,
+  "comparison_type": "initial_baseline_registration",
+  "candidate_pr_auc": 0.9984,
+  "candidate_val_net_savings": 10989367.71,
+  "candidate_capacity_within_limit": true,
+  "guardrail_passed": true,
+  "reasons": [
+    "Initial baseline model for dataset source; no prior champion to compare against."
+  ]
+}

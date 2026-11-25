@@ -33,12 +33,16 @@ class FraudExplainer:
         llm_cfg: dict[str, Any] | None = None,
     ):
         self.ml_model = ml_model
-        self.feature_names = feature_names or list(ALL_FEATURE_NAMES)
-        self.background_median = (
+        default_feats = getattr(ml_model, "feature_names_", None) or list(ALL_FEATURE_NAMES)
+        self.feature_names = list(feature_names) if feature_names is not None else list(default_feats)
+        bg = (
             np.asarray(background_median, dtype=float)
             if background_median is not None
             else np.zeros(len(self.feature_names), dtype=float)
         )
+        if len(bg) != len(self.feature_names):
+            bg = np.zeros(len(self.feature_names), dtype=float)
+        self.background_median = bg
         self.llm_cfg = llm_cfg or {}
         self._tree_explainer = None
 
@@ -181,8 +185,7 @@ class FraudExplainer:
         prompt = (
             "Ты ассистент антифрод-аналитика. Напиши краткое резюме кейса (2–3 предложения на русском) "
             "строго на основе переданных сигналов. Не меняй и не оспаривай решение.\n"
-            f"Транзакция: {tx.get('type')} на сумму {tx.get('amount')}, канал {tx.get('channel')}, "
-            f"отправитель {tx.get('nameOrig')}, получатель {tx.get('nameDest')}.\n"
+            f"Транзакция: {tx.get('type')} на сумму {tx.get('amount')}, канал {tx.get('channel') or 'N/A'}.\n"
             f"Решение: {action}, риск={risk_score:.2f} (ML={ml_score:.2f}, правила={rule_score:.2f}, аномалия={anomaly_score:.2f}).\n"
             f"Правила: {[r['reason'] for r in triggered_rules]}\n"
             f"Топ-факторы SHAP: {[f['description'] for f in top_factors[:4]]}"

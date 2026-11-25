@@ -1,5 +1,7 @@
 {
-  "created_at": "2026-11-25T09:58:58.237754+00:00",
+  "created_at": "2026-11-25T14:10:44.288138+00:00",
+  "dataset_source": "enriched_simulation",
+  "model_version": "model-sim-v002-20261125T141020Z",
   "train_rows": 18000,
   "val_rows": 6000,
   "test_rows": 6000,

@@ -1,65 +1,45 @@
-# 🛡️ AI Fraud Detection Agent — ИИ-агент для обнаружения мошеннических переводов
+# 🛡️ Сервис пре-скоринга банковских переводов (AI Fraud Detection Service)
 
-Многоуровневая сквозная система обнаружения мошеннических переводов в реальном времени, реализованная по архитектуре: **Движок правил → ML-скоринг (GBDT) + Детектор аномалий (Isolation Forest) → Решающий агент (пороги по бизнес-стоимости) + SHAP-объяснения → FastAPI + Streamlit + Мониторинг дрейфа (PSI) + Цикл обратной связи**.
+Многоуровневый сервис оценки риска банковских переводов до окончательной проводки, приведённый в соответствие с [Техническим заданием и архитектурой пилота v1.0](docs/technical_specification.md):
 
----
+**Приём, схема, аутентификация и идемпотентность → Point-in-time `OnlineFeatureStore` (строго pre-decision признаки без пост-балансов) → Правила + Калиброванный GBDT + Вспомогательный Isolation Forest → Политика порогов по стоимости и лимиту аналитиков (`ALLOW / OTP / REVIEW / BLOCK`) + Теневой режим и Fail-Safe → Аудит трёхзначных меток (`fraud / not_fraud / unknown`) → Версионируемый реестр моделей (`Candidate / Promote / Rollback`) + Мониторинг PSI и SLA**.
 
-## 🏗️ Архитектура
-
-```
-Поток транзакций (src/stream/replay.py)
-        │
-        ▼
- Приём и валидация (FastAPI / Pydantic) ──► Хранилище (Parquet + SQLite/PostgreSQL)
-        │
-        ▼
- Конструирование признаков без утечек (OnlineFeatureStore)
-  ├─ транзакционные (сумма, тип, час, канал, опустошение баланса)
-  ├─ поведенческие (скользящие окна 1ч, 24ч, 7д строго по прошлым данным)
-  ├─ отклонения от нормы (z-score суммы, отношение к среднему, новый получатель/устройство)
-  └─ графовые (входящая степень получателя, общие устройства, дроппер-паттерны)
-        │
-        ▼
- Сервис скоринга (src/api/app.py)
-  ├─ Level 1: Движок правил (чёрные списки, жёсткие лимиты, velocity, drain, mule)
-  ├─ Level 2a: Модель с учителем (LightGBM / HistGradientBoostingClassifier)
-  └─ Level 2b: Детектор аномалий (Isolation Forest на легитимных операциях)
-        │
-        ▼
- Level 3: Решающий агент (src/agent/decision_agent.py)
-  ├─ risk = f(rules, ml_score, anomaly_score)
-  ├─ действие: ALLOW / OTP / REVIEW / BLOCK (пороги оптимизированы по стоимости)
-  └─ объяснение: топ-5 факторов SHAP (+ опциональное LLM-резюме)
-        │
-        ├──► Дашборд аналитика (Streamlit: очередь алертов, карточка кейса, разметка)
-        ▼
- Цикл обратной связи (POST /feedback → POST /retrain) + Мониторинг PSI (GET /monitoring/drift)
-```
+> **Важно:** в репозитории строго разделены два синтетических источника данных — **исходный PaySim CSV** (`data/paysim dataset.csv`) и **обогащённая симуляция проекта** (`src/data/simulator.py`). Полученные на них метрики являются smoke/benchmark-результатами прототипа и не заменяют валидацию на реальном банковском потоке.
 
 ---
 
-## 📁 Структура проекта
+## 📁 Структура проекта и документации
 
 ```text
 fraud-detector/
-├── config/config.yaml                # Параметры симуляции, правил, моделей, стоимости и PSI
+├── config/config.yaml                    # Проектные параметры пилота, матрица стоимости, лимит очереди, безопасность
+├── docs/
+│   ├── technical_specification.md        # ТЗ, план и целевая архитектура антифрод-модели (v1.0)
+│   ├── feature_contract.md               # Контракт доступности pre-decision признаков и порядка событий (v2.0.0)
+│   ├── decision_and_cost_contract.md     # Контракт решений, fail-safe и чек-лист открытых вопросов банка
+│   └── runbook_and_release.md            # Runbook эксплуатации, теневого пилота, выпуска и отката моделей
 ├── src/
-│   ├── data/                         # Pydantic-схемы, PaySim-симулятор, SQLAlchemy-хранилище
-│   ├── features/                     # OnlineFeatureStore (leak-free) + batch pipeline
-│   ├── rules/                        # Движок правил (Level 1)
-│   ├── models/                       # Baseline LogReg, GBDT (LightGBM/HistGBDT), Isolation Forest
-│   ├── agent/                        # Решающий агент, оптимизация порогов, SHAP + LLM explainer
-│   ├── evaluation/                   # PR-AUC, ROC-AUC, Recall@FPR, P@K, Cost, абляции
-│   ├── monitoring/                   # PSI-дрейф признаков/скоров и качество по разметке
-│   ├── training/                     # Пайплайн обучения и дообучения с обратной связью
-│   ├── api/                          # FastAPI-сервис скоринга
-│   └── stream/                       # Хронологический воспроизводитель потока транзакций
-├── dashboard/app.py                  # Дашборд аналитика на Streamlit
-├── notebooks/                        # 01_eda_and_data_simulation.ipynb, 02_modeling_and_ablations.ipynb
-├── reports/project_report.md         # Полный отчёт с метриками, абляциями и рисками
-├── tests/test_pipeline.py            # Юнит- и интеграционные тесты (включая проверку утечек)
-├── Dockerfile & docker-compose.yml   # Контейнеризация API + Dashboard
-└── requirements.txt / pyproject.toml
+│   ├── data/                             # Схемы Pydantic, профайлер/загрузчик PaySim CSV, симулятор, БД с аудитом меток
+│   ├── features/                         # OnlineFeatureStore (pre-decision контракт, cold-start и missingness метрики)
+│   ├── rules/                            # Детерминированный движок правил и списков (Level 1)
+│   ├── models/                           # Baseline LogReg, калиброванный GBDT, вспомогательный IsoForest, ModelRegistry
+│   ├── agent/                            # Сервис решений (auxiliary cap, shadow mode, fail-safe), пороги с учётом capacity, SHAP
+│   ├── evaluation/                       # PR-AUC, bootstrap CI, временные срезы, сегменты, разбор FP/FN, p50/p95/p99, абляции
+│   ├── monitoring/                       # PSI-дрейф, качество зрелых меток, смещение выборки (selection bias), алерты SLA
+│   ├── training/                         # Раздельное офлайн-обучение по источникам и регистрация кандидатов без перезаписи
+│   ├── api/app.py                        # FastAPI-сервис скоринга, очереди аналитика и управления релизами моделей
+│   ├── security.py                       # HMAC-псевдонимизация ID, редактирование логов, API-ключ и rate limiter
+│   └── stream/replay.py                  # Воспроизводитель потока pre-decision транзакций (Active / Shadow)
+├── dashboard/app.py                      # Streamlit-рабочее место аналитика и управления реестром моделей
+├── models/
+│   ├── manifests/                        # Воспроизводимые Data Manifests (SHA-256, схема, объём, ограничения)
+│   ├── registry/                         # Неизменяемые версии кандидатов, отчёты сравнения и стек отката
+│   └── artifacts/                        # Синхронизированный снимок текущей утверждённой активной модели
+├── reports/
+│   ├── project_report.md                 # Сводный отчёт верификации по обоим источникам данных
+│   ├── benchmark_paysim_csv.json         # Полный протокол метрик на исходном PaySim CSV
+│   └── benchmark_enriched_simulation.json# Полный протокол метрик на обогащённой симуляции проекта
+└── tests/                                # Юнит- и интеграционные тесты контракта признаков, утечек, аудита и релизов
 ```
 
 ---
@@ -72,60 +52,40 @@ fraud-detector/
 pip install -r requirements.txt
 ```
 
-> Примечание: если `lightgbm` или `shap` не установлены в среде, система автоматически использует встроенные эквиваленты (`HistGradientBoostingClassifier` из scikit-learn и быструю локальную Shapley-атрибуцию), сохраняя полную работоспособность.
+### 2. Профилирование источников и раздельное обучение моделей
 
-### 2. Обучение моделей, подбор порогов и абляции
+Обучить и верифицировать модели отдельно на **исходном PaySim CSV** и **обогащённой симуляции проекта** с формированием `models/manifests/*` и регистрацией в `models/registry/`:
 
 ```bash
-python -m src.training.pipeline
+python -m src.training.pipeline --dataset both --promote
 ```
 
-Команда сгенерирует 30 000 транзакций (`data/raw/transactions.parquet`), построит 35 leak-free признаков (`data/processed/features.parquet`), обучит модели на строгом разбиении по времени (60/20/20), подберёт пороги по бизнес-стоимости, выполнит абляции и сохранит артефакты в `models/artifacts/`.
+Либо отдельно по выбранному источнику (`--dataset paysim_csv` или `--dataset enriched_simulation`).
 
-### 3. Запуск FastAPI-сервиса скоринга
+### 3. Запуск FastAPI-сервиса
 
 ```bash
 uvicorn src.api.app:app --reload --port 8000
 ```
 
-Документация Swagger UI доступна по адресу: `http://127.0.0.1:8000/docs`.
+Основные эндпоинты (`http://127.0.0.1:8000/docs`):
+- `POST /score` — пре-скоринг перевода (`?shadow=true` для теневого пилота; возвращает `model_version`, `technical_status`, `effective_action`, факторы SHAP и сработавшие правила)
+- `GET /alerts`, `GET /alerts/{tx_id}`, `GET /alerts/{tx_id}/audit` — очередь аналитика, карточка кейса и журнал изменений метки
+- `POST /feedback` — разметка `fraud / not_fraud / unknown` с указанием `label_source` и комментария
+- `GET /metrics/summary` — задержка `p50/p95/p99`, загрузка очереди `REVIEW`, зрелые метки, смещение выборки и операционные алерты
+- `GET /monitoring/drift` — отчёт PSI по признакам и скорам
+- `GET /manifests` и `GET /ablations?dataset_source=paysim_csv|enriched_simulation` — Data Manifests и раздельные бенчмарки
+- `POST /retrain` — обучение **кандидата** в реестре с отчётом сравнения (**без** автоматической публикации)
+- `GET /models/registry`, `GET /models/{version_id}/report`, `POST /models/{version_id}/promote`, `POST /models/rollback` — реестр кандидатов, согласование выпуска и мгновенный откат
 
-Основные эндпоинты:
-- `POST /score` — скоринг транзакции в реальном времени с SHAP-объяснением
-- `GET /alerts` — очередь алертов (фильтрация по `action` и статусу разметки)
-- `GET /alerts/{tx_id}` — подробная карточка кейса
-- `POST /feedback` — отправка разметки аналитика (`is_fraud`, комментарии)
-- `GET /metrics/summary` — операционные метрики и качество по разметке
-- `GET /monitoring/drift` — отчёт по дрейфу данных (PSI)
-- `GET /ablations` — результаты абляционного исследования
-- `POST /retrain` — запуск дообучения модели с учётом разметки аналитиков
-
-### 4. Имитация потока транзакций в реальном времени
-
-В отдельном терминале (при запущенном FastAPI):
+### 4. Поток транзакций и дашборд аналитика
 
 ```bash
-python -m src.stream.replay --n-events 300 --delay-ms 10
-```
-
-### 5. Запуск дашборда аналитика (Streamlit)
-
-```bash
+python -m src.stream.replay --dataset enriched_simulation --n-events 300 --delay-ms 10
 streamlit run dashboard/app.py
 ```
 
-Откройте `http://localhost:8501` для работы с очередью алертов, карточками кейсов, графиками SHAP, мониторингом PSI, абляциями и формой ручного тестирования транзакций.
-
-### 6. Запуск через Docker Compose
-
-```bash
-docker compose up --build
-```
-
-- FastAPI: `http://localhost:8000/docs`
-- Streamlit Dashboard: `http://localhost:8501`
-
-### 7. Запуск тестов
+### 5. Запуск тестов
 
 ```bash
 python -m unittest discover -s tests -v
@@ -133,14 +93,26 @@ python -m unittest discover -s tests -v
 
 ---
 
-## 📊 Краткие результаты (Test Set)
+## 📊 Раздельные результаты бенчмарка (Pre-Decision Holdout Test)
 
-Подробный анализ, матрица стоимости и разбор рисков приведены в [reports/project_report.md](reports/project_report.md).
+Посттранзакционные балансы (`newbalanceOrig`, `newbalanceDest`) и поле `isFlaggedFraud` исключены из входов всех боевых вариантов. Подробный разбор срезов, сегментов, ошибок FP/FN и ограничений приведён в [reports/project_report.md](reports/project_report.md).
 
-| Вариант | PR-AUC | Recall @ 1% FPR | Precision@100 | Чистая экономия |
-|---|---:|---:|---:|---:|
-| Rules Only | 0.5622 | 0.5177 | 0.7400 | 2 629 769 |
-| Baseline LogReg (Tx Only) | 0.8135 | 0.7660 | 0.9000 | 1 865 639 |
-| GBDT (Tx Only) | 0.9660 | 0.9504 | 1.0000 | 2 811 169 |
-| GBDT (Full Features) | **0.9876** | **0.9929** | **1.0000** | 2 803 598 |
-| **Full AI Agent (Rules + GBDT + IsoForest)** | **0.9745** | **0.9716** | **0.9900** | **2 804 696** |
+### А. Исходный PaySim CSV (`data/paysim dataset.csv`, 25 pre-decision признаков, без фабрикации телеметрии)
+
+| Вариант | PR-AUC | Recall @ 1% FPR | Доля суммы фрода | FP / 1000 | REVIEW / сутки |
+|---|---:|---:|---:|---:|---:|
+| PaySim `isFlaggedFraud` (исходное правило CSV) | 0.0030 | 0.0000 | 0.00% | 0.00 | 0.0 |
+| Rules Only | 0.0165 | 0.0000 | 98.92% | 70.17 | 0.0 |
+| Baseline LogReg (All Pre-Decision) | 0.0792 | 0.2958 | 99.65% | 254.04 | 20.0 |
+| **Full Decision Service (Rules + GBDT + Aux Iso)** | **0.9984** | **1.0000** | **100.00%** | **0.08** | **0.0** |
+
+### Б. Обогащённая симуляция проекта (`src/data/simulator.py`, 32 pre-decision признака)
+
+| Вариант | PR-AUC | Recall @ 1% FPR | Доля суммы фрода | FP / 1000 | REVIEW / сутки | Ожид. стоимость / опер. |
+|---|---:|---:|---:|---:|---:|---:|
+| Rules Only | 0.5926 | 0.5177 | 95.16% | 45.33 | 0.0 | 29.59 |
+| Baseline LogReg (Pre-Decision Tx Only) | 0.6607 | 0.6312 | 66.70% | 35.50 | 23.8 | 159.87 |
+| Baseline LogReg (All Pre-Decision) | 0.9202 | 0.9078 | 95.04% | 22.00 | 14.2 | 25.14 |
+| GBDT (Pre-Decision Tx Only) | 0.9459 | 0.9291 | 99.15% | 10.33 | 7.5 | 4.95 |
+| GBDT (All Pre-Decision) | **0.9908** | **0.9858** | 99.49% | 1.83 | 2.6 | 2.53 |
+| **Full Decision Service (Rules + GBDT + Aux Iso)** | **0.9882** | **0.9787** | **99.66%** | **1.00** | **2.1** | **1.75** |

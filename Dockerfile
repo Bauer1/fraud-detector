@@ -12,11 +12,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY config/ config/
+COPY docs/ docs/
 COPY src/ src/
 COPY dashboard/ dashboard/
 COPY pyproject.toml README.md ./
 
-RUN mkdir -p data/raw data/processed models/artifacts reports
+RUN mkdir -p data/raw data/processed models/artifacts models/registry models/manifests reports
 
 EXPOSE 8000 8501
 

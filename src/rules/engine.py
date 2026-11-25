@@ -36,11 +36,11 @@ class RuleEngine:
         hard_block = False
         score = 0.0
 
-        orig = str(tx.get("nameOrig", ""))
-        dest = str(tx.get("nameDest", ""))
-        device = str(tx.get("device_id", ""))
-        amount = float(tx.get("amount", features.get("amount", 0.0)))
-        tx_type = str(tx.get("type", ""))
+        orig = str(tx.get("nameOrig") or "")
+        dest = str(tx.get("nameDest") or "")
+        device = str(tx.get("device_id") or "")
+        amount = float(tx.get("amount") or features.get("amount", 0.0))
+        tx_type = str(tx.get("type") or "")
 
         # 1. Blacklists (HARD BLOCK)
         if orig in self.blacklisted_accounts or dest in self.blacklisted_accounts:

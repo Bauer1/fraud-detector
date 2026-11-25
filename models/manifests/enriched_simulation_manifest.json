@@ -1,0 +1,112 @@
+{
+  "dataset_id": "enriched_simulation",
+  "dataset_title_ru": "Обогащённая симуляция проекта",
+  "source_origin": "Project synthetic generator (`src/data/simulator.py`) with 5 injected fraud scenarios and concept drift",
+  "profiled_at_utc": "2026-11-25T14:10:10.602206+00:00",
+  "file_path": "data/raw/transactions.parquet",
+  "file_size_bytes": 1668895,
+  "file_sha256": "21a43d15cbc0df2e4524140dadca4f811aabc8dc277637651768330956902eb6",
+  "schema": {
+    "columns": [
+      "tx_id",
+      "step",
+      "timestamp",
+      "type",
+      "amount",
+      "nameOrig",
+      "oldbalanceOrg",
+      "newbalanceOrig",
+      "nameDest",
+      "oldbalanceDest",
+      "newbalanceDest",
+      "device_id",
+      "channel",
+      "ip_country",
+      "isFraud",
+      "fraud_scenario"
+    ],
+    "dtypes": {
+      "tx_id": "str",
+      "step": "int64",
+      "timestamp": "datetime64[us]",
+      "type": "str",
+      "amount": "float64",
+      "nameOrig": "str",
+      "oldbalanceOrg": "float64",
+      "newbalanceOrig": "float64",
+      "nameDest": "str",
+      "oldbalanceDest": "float64",
+      "newbalanceDest": "float64",
+      "device_id": "str",
+      "channel": "str",
+      "ip_country": "str",
+      "isFraud": "int64",
+      "fraud_scenario": "str"
+    },
+    "synthetic_enriched_columns": [
+      "tx_id",
+      "timestamp",
+      "device_id",
+      "channel",
+      "ip_country",
+      "fraud_scenario"
+    ]
+  },
+  "row_count": 30000,
+  "class_balance": {
+    "fraud_count": 450,
+    "legitimate_count": 29550,
+    "fraud_rate": 0.015,
+    "scenario_counts": {
+      "legitimate": 29550,
+      "account_takeover": 135,
+      "mule_chain": 103,
+      "velocity_burst": 99,
+      "anomalous_amount": 67,
+      "novel_api_cashout": 46
+    }
+  },
+  "type_distribution": {
+    "PAYMENT": 10274,
+    "TRANSFER": 8634,
+    "CASH_OUT": 6034,
+    "CASH_IN": 3586,
+    "DEBIT": 1472
+  },
+  "temporal_coverage": {
+    "min_step": 0,
+    "max_step": 719,
+    "min_timestamp_utc": "2026-01-01 00:02:01",
+    "max_timestamp_utc": "2026-01-30 23:53:59",
+    "ordering_rule": "Deterministic sort by (UTC timestamp ASC, tx_id ASC)"
+  },
+  "data_quality": {
+    "null_counts": {
+      "tx_id": 0,
+      "step": 0,
+      "timestamp": 0,
+      "type": 0,
+      "amount": 0,
+      "nameOrig": 0,
+      "oldbalanceOrg": 0,
+      "newbalanceOrig": 0,
+      "nameDest": 0,
+      "oldbalanceDest": 0,
+      "newbalanceDest": 0,
+      "device_id": 0,
+      "channel": 0,
+      "ip_country": 0,
+      "isFraud": 0,
+      "fraud_scenario": 0
+    },
+    "duplicate_tx_ids": 0,
+    "amount_min": 8.24,
+    "amount_max": 110735.29,
+    "amount_mean": 1678.52
+  },
+  "feature_availability_and_leakage_notes": [
+    "Synthetic dataset created for end-to-end engineering, ablation, and drift smoke-testing.",
+    "Metrics on this simulation are prototype benchmark results and must NEVER be presented as production bank performance.",
+    "Post-transaction balances (`newbalanceOrig`, `newbalanceDest`) are excluded in `pre_decision` mode."
+  ]
+}

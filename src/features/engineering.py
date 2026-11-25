@@ -16,12 +16,12 @@ from src.features.online_store import (
 
 
 def sort_transactions_deterministically(df: pd.DataFrame, *, deduplicate_retries: bool = True) -> pd.DataFrame:
-    """Sort transactions chronologically by UTC timestamp (or step) with deterministic `tx_id` tie-breaking.
+    """Sort transactions chronologically by UTC timestamp (or step) with deterministic secondary tie-breaking.
 
-    If `deduplicate_retries=True` and `tx_id` is present:
-    - Exact retry rows (identical `tx_id` and canonical transaction fields) keep only the first occurrence.
-    - Conflicting rows sharing `tx_id` with different canonical transaction payloads raise
-      `DuplicateTransactionConflictError`.
+    Tie-breaking rule (Section 7.3 of Technical Specification):
+    - Primary key: normalized UTC timestamp (or `step` mapped to UTC hour).
+    - Secondary key: `source_row_idx` (if present, e.g. Original PaySim CSV) + `tx_id` (if present) + row index.
+      This guarantees reproducible velocity and graph features when multiple events share the same `step` or timestamp.
     """
     if df.empty:
         return df.copy()
@@ -37,8 +37,14 @@ def sort_transactions_deterministically(df: pd.DataFrame, *, deduplicate_retries
         else:
             ts_val = float(idx)
         sort_ts.append(ts_val)
+
         tx_id_val = rec.get("tx_id")
-        tie_ids.append(str(tx_id_val) if tx_id_val is not None else f"__row_{idx:09d}")
+        if tx_id_val is not None and str(tx_id_val).strip():
+            tie_ids.append(str(tx_id_val))
+        elif "source_row_idx" in rec and rec["source_row_idx"] is not None:
+            tie_ids.append(f"__src_{int(rec['source_row_idx']):010d}")
+        else:
+            tie_ids.append(f"__row_{idx:010d}")
 
     out = df.copy()
     out["__sort_ts_utc"] = sort_ts
@@ -70,17 +76,14 @@ def build_features_chronological(
     mule_in_degree_threshold: int = 5,
     return_store: bool = False,
 ) -> pd.DataFrame | tuple[pd.DataFrame, OnlineFeatureStore]:
-    """Compute all transactional, behavioral, deviation, and graph features strictly chronologically.
-
-    Input DataFrame is sorted deterministically by (UTC timestamp, tx_id) first to guarantee
-    zero future leakage and reproducible tie-breaking for simultaneous events.
-    """
+    """Compute all point-in-time features strictly chronologically using only prior events."""
     df_sorted = sort_transactions_deterministically(df, deduplicate_retries=True)
 
     store = OnlineFeatureStore(
         mule_in_degree_threshold=mule_in_degree_threshold,
-        max_sender_out_of_order_sec=0.0,
+        max_sender_out_of_order_sec=None,
         max_global_staleness_sec=None,
+        max_idempotency_entries=max(50000, len(df_sorted) + 100),
         state_origin="batch_offline_full_dataset",
     )
     feature_rows: list[dict[str, float]] = []
@@ -96,6 +99,7 @@ def build_features_chronological(
         c
         for c in [
             "tx_id",
+            "source_row_idx",
             "step",
             "timestamp",
             "type",
@@ -105,6 +109,7 @@ def build_features_chronological(
             "channel",
             "ip_country",
             "isFraud",
+            "isFlaggedFraud",
             "fraud_scenario",
         ]
         if c in df_sorted.columns

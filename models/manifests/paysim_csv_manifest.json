@@ -1,0 +1,100 @@
+{
+  "dataset_id": "paysim_csv",
+  "dataset_title_ru": "Исходный PaySim CSV",
+  "source_origin": "Kaggle PaySim1 synthetic mobile money dataset (local file data/paysim dataset.csv)",
+  "profiled_at_utc": "2026-11-25T14:08:55.686280+00:00",
+  "file_path": "data/paysim dataset.csv",
+  "file_size_bytes": 493534783,
+  "file_sha256": "16910f90577b0d981bf8ff289714510bb89bc71bff7d3f220f024e287e4eea6b",
+  "schema": {
+    "columns": [
+      "step",
+      "type",
+      "amount",
+      "nameOrig",
+      "oldbalanceOrg",
+      "newbalanceOrig",
+      "nameDest",
+      "oldbalanceDest",
+      "newbalanceDest",
+      "isFraud",
+      "isFlaggedFraud"
+    ],
+    "dtypes": {
+      "step": "int64",
+      "type": "str",
+      "amount": "float64",
+      "nameOrig": "str",
+      "oldbalanceOrg": "float64",
+      "newbalanceOrig": "float64",
+      "nameDest": "str",
+      "oldbalanceDest": "float64",
+      "newbalanceDest": "float64",
+      "isFraud": "int64",
+      "isFlaggedFraud": "int64"
+    },
+    "absent_telemetry_columns": [
+      "tx_id",
+      "timestamp",
+      "device_id",
+      "channel",
+      "ip_country"
+    ]
+  },
+  "row_count": 6362620,
+  "class_balance": {
+    "fraud_count": 8213,
+    "legitimate_count": 6354407,
+    "fraud_rate": 0.001291,
+    "isFlaggedFraud_count": 16,
+    "isFlaggedFraud_true_positives": 16
+  },
+  "type_distribution": {
+    "CASH_OUT": 2237500,
+    "PAYMENT": 2151495,
+    "CASH_IN": 1399284,
+    "TRANSFER": 532909,
+    "DEBIT": 41432
+  },
+  "fraud_by_type": {
+    "CASH_OUT": 4116,
+    "TRANSFER": 4097
+  },
+  "temporal_coverage": {
+    "unit": "step (1 step = 1 simulated hour; no absolute calendar timestamp in CSV)",
+    "min_step": 1,
+    "max_step": 743,
+    "span_hours": 743,
+    "approx_days": 30.96,
+    "non_monotonic_step_transitions": 0,
+    "equal_step_ordering_rule": "Deterministic tie-break by (step ASC, source_row_idx ASC) via generated ID PAYSIM_{row_idx:08d}"
+  },
+  "data_quality": {
+    "null_counts": {
+      "step": 0,
+      "type": 0,
+      "amount": 0,
+      "nameOrig": 0,
+      "oldbalanceOrg": 0,
+      "newbalanceOrig": 0,
+      "nameDest": 0,
+      "oldbalanceDest": 0,
+      "newbalanceDest": 0,
+      "isFraud": 0,
+      "isFlaggedFraud": 0
+    },
+    "within_chunk_exact_duplicates": 0,
+    "negative_amounts": 0,
+    "zero_amounts": 16,
+    "amount_min": 0.0,
+    "amount_max": 92445516.64,
+    "amount_mean": 179861.9
+  },
+  "feature_availability_and_leakage_notes": [
+    "CSV labels `isFraud` are synthetic (PaySim simulator) and do not prove real bank transferability.",
+    "`isFlaggedFraud` is PaySim's built-in rule output and is strictly forbidden as a model input.",
+    "`newbalanceOrig` and `newbalanceDest` reflect post-settlement state (`post_orig_balance_changed=4273583`, `post_dest_balance_changed=4045328`) and are excluded by default under the pre-decision contract.",
+    "Raw `nameOrig` and `nameDest` are pseudonymous entity keys used strictly for point-in-time aggregates, never fed to ML as raw IDs.",
+    "Zero-amount rows (`zero_amounts` in PaySim) are filtered/logged during validation because transfer amount must be > 0."
+  ]
+}

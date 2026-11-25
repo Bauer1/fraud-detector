@@ -1,4 +1,4 @@
-"""Unsupervised anomaly detection (Isolation Forest) for novel/unseen fraud schemes."""
+"""Unsupervised anomaly detection (Isolation Forest) as an auxiliary drift/novelty signal."""
 from __future__ import annotations
 
 from typing import Any
@@ -12,8 +12,9 @@ from sklearn.preprocessing import RobustScaler
 class FraudAnomalyDetector:
     """Isolation Forest trained on normal (legitimate) transactions.
 
-    Maps raw Isolation Forest decision scores into a calibrated [0, 1] anomaly risk score
-    using training percentiles so it can be combined cleanly with ML probabilities and rule scores.
+    Maps raw Isolation Forest decision scores into a [0, 1] auxiliary anomaly score using
+    training percentiles. Per Technical Specification Section 5, anomaly score is strictly
+    an auxiliary signal/monitor and never defines fraud on its own.
     """
 
     def __init__(self, params: dict[str, Any] | None = None):
@@ -31,12 +32,11 @@ class FraudAnomalyDetector:
         self._raw_max: float = 0.3
 
     def fit(self, X_normal: pd.DataFrame) -> "FraudAnomalyDetector":
-        """Fit on legitimate transactions only (or unlabeled historical baseline)."""
+        """Fit on legitimate training transactions only."""
         self.feature_names_ = list(X_normal.columns)
         X_scaled = self.scaler.fit_transform(X_normal.values)
         self.model.fit(X_scaled)
-        # decision_function: higher = more normal, lower = more anomalous
-        raw_scores = -self.model.decision_function(X_scaled)  # higher = more anomalous
+        raw_scores = -self.model.decision_function(X_scaled)
         self._raw_min = float(np.percentile(raw_scores, 5))
         self._raw_max = float(np.percentile(raw_scores, 99.5))
         if self._raw_max <= self._raw_min:
@@ -44,8 +44,14 @@ class FraudAnomalyDetector:
         return self
 
     def predict_anomaly_score(self, X: pd.DataFrame | np.ndarray) -> np.ndarray:
-        """Return normalized anomaly risk score in [0, 1] (higher = more anomalous)."""
-        arr = X.values if isinstance(X, pd.DataFrame) else np.asarray(X)
+        """Return normalized auxiliary anomaly score in [0, 1] (higher = more anomalous)."""
+        if isinstance(X, pd.DataFrame):
+            if self.feature_names_ and set(self.feature_names_).issubset(X.columns):
+                arr = X[self.feature_names_].values
+            else:
+                arr = X.values
+        else:
+            arr = np.asarray(X)
         X_scaled = self.scaler.transform(arr)
         raw = -self.model.decision_function(X_scaled)
         norm = (raw - self._raw_min) / (self._raw_max - self._raw_min)

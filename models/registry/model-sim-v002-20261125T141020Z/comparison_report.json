@@ -1,0 +1,15 @@
+{
+  "candidate_version": "model-sim-v002-20261125T141020Z",
+  "champion_version": "model-paysim-v001-20261125T140942Z",
+  "same_dataset_source": false,
+  "candidate_pr_auc": 0.9882,
+  "champion_pr_auc": 0.9984,
+  "pr_auc_delta": -0.0102,
+  "pr_auc_ratio": 0.9898,
+  "val_net_savings_delta": -10154678.64,
+  "candidate_capacity_within_limit": true,
+  "guardrail_passed": true,
+  "reasons": [
+    "All quality and capacity guardrails passed."
+  ]
+}

@@ -1,25 +1,48 @@
 project:
-  name: "AI Fraud Detection Agent"
+  name: "AI Fraud Detection Service"
+  version: "1.0.0-pilot"
   random_seed: 42
+  # Все пороги, стоимости и лимиты ниже — проектные предложения пилота (см. раздел 10 ТЗ),
+  # подлежащие утверждению владельцем продукта и данных банка перед боевым запуском.
+  pilot_proposal_notice: "PROPOSED_PILOT_DEFAULTS_PENDING_BANK_SIGNOFF"
 
 paths:
+  paysim_csv: "data/paysim dataset.csv"
   raw_data: "data/raw/transactions.parquet"
   processed_data: "data/processed/features.parquet"
+  paysim_processed_data: "data/processed/paysim_features.parquet"
   database_url: "sqlite:///data/fraud_agent.db"
   artifacts_dir: "models/artifacts"
+  registry_dir: "models/registry"
+  manifests_dir: "models/manifests"
   reports_dir: "reports"
+
+datasets:
+  # Два строго разделённых источника данных: "enriched_simulation" и "paysim_csv"
+  active_training_source: "enriched_simulation"
+  paysim_csv:
+    sampling_mode: "chronological_stride"   # "chronological_stride" | "chronological_prefix" | "full"
+    max_rows: 120000
+    equal_step_policy: "step_asc_source_row_idx_asc"
 
 simulation:
   n_customers: 600
   n_merchants: 250
   n_transactions: 30000
   n_days: 30
-  fraud_rate: 0.015  # ~1.5% realistic imbalanced fraud rate
+  fraud_rate: 0.015  # ~1.5% в обогащённой симуляции (в исходном PaySim CSV ~0.129%)
 
 split:
   train_frac: 0.60
   val_frac: 0.20
   test_frac: 0.20
+
+feature_contract:
+  schema_version: "2.0.0-pre-decision"
+  # Исключать посттранзакционные балансы (newbalanceOrig, newbalanceDest) и баланс получателя до подтверждения источника
+  allow_post_tx_balances: false
+  allow_dest_balances: false
+  allow_sender_pre_balance: true   # oldbalanceOrg допускается как условно подтверждаемый pre-decision атрибут
 
 rules:
   hard_limit_amount: 250000.0
@@ -40,6 +63,7 @@ rules:
     - "DEV_BLACK_002"
 
 model:
+  calibration_method: "sigmoid"    # "sigmoid" (Platt) | "isotonic" | "none"
   lgbm_params:
     n_estimators: 250
     learning_rate: 0.05
@@ -58,39 +82,61 @@ model:
 
 agent:
   weights:
-    ml_score: 0.65
+    ml_score: 0.70
     rule_score: 0.25
-    anomaly_score: 0.10
-  # Initial fallback thresholds (overridden by cost-optimized thresholds after training)
+    anomaly_score: 0.05
+  # Аномальный скор является строго вспомогательным и не может сам по себе давать REVIEW/BLOCK
+  anomaly_max_standalone_score: 0.14
+  # Предлагаемые стартовые пороги пилота (переопределяются на validation по стоимости + capacity)
   thresholds:
     otp: 0.30
     review: 0.55
     block: 0.80
   costs:
-    otp_cost: 2.0               # Customer friction + SMS/push cost
-    review_cost: 25.0           # Analyst time cost per manual review
-    false_block_cost: 150.0     # Customer churn/friction cost on legitimate block
-    otp_fraud_catch_rate: 0.70  # Fraction of fraud stopped by OTP challenge
+    otp_cost: 2.0                 # Стоимость OTP / трение клиента (предложение пилота)
+    review_cost: 25.0             # Стоимость ручного разбора аналитиком
+    false_block_cost: 150.0       # Стоимость ложной блокировки легитимного перевода
+    otp_fraud_catch_rate: 0.70
     review_fraud_catch_rate: 0.92
     block_fraud_catch_rate: 1.00
+  capacity:
+    max_review_rate: 0.03         # Не более 3% потока в очередь REVIEW
+    max_daily_reviews: 150        # Лимит кейсов REVIEW в сутки на команду аналитиков
 
 monitoring:
   psi_warning_threshold: 0.10
   psi_critical_threshold: 0.25
   psi_bins: 10
+  latency_sla_p95_ms: 150.0       # Проектный ориентир задержки p95 до интеграционного пилота
+  label_maturity_hours: 72.0      # Период созревания метки (неразмеченные недавние операции = unknown, не negative)
 
 scoring:
-  auto_train_on_startup: false             # Обучение и запуск API разделены
-  initial_state_mode: "empty"              # "empty" | "operational_db" | "pre_test_warmup" (без утечки из теста)
-  max_sender_out_of_order_seconds: 300.0   # Отклонять события клиента старше 5 минут от его последнего события
-  max_global_staleness_seconds: 86400.0    # Отклонять события старше 24 часов от глобального watermark потока
+  auto_train_on_startup: false
+  initial_state_mode: "empty"              # "empty" | "operational_db" | "pre_test_warmup"
+  shadow_mode: false                       # true = теневой пилот (effective_action="ALLOW", решение логируется для сверки)
+  fallback_policy: "rules_only"            # "rules_only" | "hold_for_review" — утверждённый fail-safe при деградации ML
+  scoring_timeout_budget_ms: 500.0
+  max_sender_out_of_order_seconds: 300.0
+  max_global_staleness_seconds: 86400.0
   max_idempotency_cache_size: 50000
 
+governance:
+  auto_promote_on_retrain: false           # ЗАПРЕЩЕНО автоматически публиковать модель из /retrain без проверки и выпуска
+  min_pr_auc_guardrail_ratio: 0.95         # Кандидат не должен деградировать по PR-AUC более чем на 5% относительно активной модели
+
 retraining:
-  exclude_holdout_feedback: true           # Запрещать включение кейсов из val/test holdout в дообучение
+  exclude_holdout_feedback: true
+  require_mature_labels_for_negatives: true
+
+security:
+  require_api_key: false                   # Включить true + задать FRAUD_API_KEY в межсервисном контуре
+  api_key: ""
+  pseudonymize_ids: false                  # Включить true + задать FRAUD_PSEUDO_SALT для HMAC-псевдонимизации ID при приёме
+  pseudonymization_salt: "change-me-in-pilot"
+  rate_limit_per_minute: 3000
 
 llm:
-  enabled: false                # Set true + OPENAI_API_KEY env var for live LLM summaries
+  enabled: false                           # Строго вспомогательное текстовое резюме; никогда не влияет на риск или действие
   model: "gpt-4o-mini"
   api_base: "https://api.openai.com/v1"
   timeout_seconds: 10

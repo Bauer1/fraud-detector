@@ -1,0 +1,155 @@
+{
+  "project": {
+    "name": "AI Fraud Detection Service",
+    "version": "1.0.0-pilot",
+    "random_seed": 42,
+    "pilot_proposal_notice": "PROPOSED_PILOT_DEFAULTS_PENDING_BANK_SIGNOFF"
+  },
+  "paths": {
+    "paysim_csv": "data/paysim dataset.csv",
+    "raw_data": "data/raw/transactions.parquet",
+    "processed_data": "data/processed/features.parquet",
+    "paysim_processed_data": "data/processed/paysim_features.parquet",
+    "database_url": "sqlite:///data/fraud_agent.db",
+    "artifacts_dir": "models/artifacts",
+    "registry_dir": "models/registry",
+    "manifests_dir": "models/manifests",
+    "reports_dir": "reports"
+  },
+  "datasets": {
+    "active_training_source": "enriched_simulation",
+    "paysim_csv": {
+      "sampling_mode": "chronological_stride",
+      "max_rows": 120000,
+      "equal_step_policy": "step_asc_source_row_idx_asc"
+    }
+  },
+  "simulation": {
+    "n_customers": 600,
+    "n_merchants": 250,
+    "n_transactions": 30000,
+    "n_days": 30,
+    "fraud_rate": 0.015
+  },
+  "split": {
+    "train_frac": 0.6,
+    "val_frac": 0.2,
+    "test_frac": 0.2
+  },
+  "feature_contract": {
+    "schema_version": "2.0.0-pre-decision",
+    "allow_post_tx_balances": false,
+    "allow_dest_balances": false,
+    "allow_sender_pre_balance": true
+  },
+  "rules": {
+    "hard_limit_amount": 250000.0,
+    "night_high_amount": 50000.0,
+    "night_hours": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "max_tx_1h": 6,
+    "max_amount_1h": 100000.0,
+    "drain_ratio_threshold": 0.95,
+    "drain_min_amount": 15000.0,
+    "mule_in_degree_threshold": 5,
+    "shared_device_accounts_threshold": 3,
+    "blacklisted_accounts": [
+      "C_BLACKLIST_001",
+      "C_BLACKLIST_002",
+      "M_BLACKLIST_999"
+    ],
+    "blacklisted_devices": [
+      "DEV_BLACK_001",
+      "DEV_BLACK_002"
+    ]
+  },
+  "model": {
+    "calibration_method": "sigmoid",
+    "lgbm_params": {
+      "n_estimators": 250,
+      "learning_rate": 0.05,
+      "max_depth": 6,
+      "num_leaves": 31,
+      "min_child_samples": 30,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "class_weight": "balanced",
+      "random_state": 42
+    },
+    "isolation_forest": {
+      "n_estimators": 150,
+      "contamination": 0.02,
+      "max_samples": 512,
+      "random_state": 42
+    }
+  },
+  "agent": {
+    "weights": {
+      "ml_score": 0.7,
+      "rule_score": 0.25,
+      "anomaly_score": 0.05
+    },
+    "anomaly_max_standalone_score": 0.14,
+    "thresholds": {
+      "otp": 0.3,
+      "review": 0.55,
+      "block": 0.8
+    },
+    "costs": {
+      "otp_cost": 2.0,
+      "review_cost": 25.0,
+      "false_block_cost": 150.0,
+      "otp_fraud_catch_rate": 0.7,
+      "review_fraud_catch_rate": 0.92,
+      "block_fraud_catch_rate": 1.0
+    },
+    "capacity": {
+      "max_review_rate": 0.03,
+      "max_daily_reviews": 150
+    }
+  },
+  "monitoring": {
+    "psi_warning_threshold": 0.1,
+    "psi_critical_threshold": 0.25,
+    "psi_bins": 10,
+    "latency_sla_p95_ms": 150.0,
+    "label_maturity_hours": 72.0
+  },
+  "scoring": {
+    "auto_train_on_startup": false,
+    "initial_state_mode": "empty",
+    "shadow_mode": false,
+    "fallback_policy": "rules_only",
+    "scoring_timeout_budget_ms": 500.0,
+    "max_sender_out_of_order_seconds": 300.0,
+    "max_global_staleness_seconds": 86400.0,
+    "max_idempotency_cache_size": 50000
+  },
+  "governance": {
+    "auto_promote_on_retrain": false,
+    "min_pr_auc_guardrail_ratio": 0.95
+  },
+  "retraining": {
+    "exclude_holdout_feedback": true,
+    "require_mature_labels_for_negatives": true
+  },
+  "security": {
+    "require_api_key": false,
+    "api_key": "",
+    "pseudonymize_ids": false,
+    "pseudonymization_salt": "change-me-in-pilot",
+    "rate_limit_per_minute": 3000
+  },
+  "llm": {
+    "enabled": false,
+    "model": "gpt-4o-mini",
+    "api_base": "https://api.openai.com/v1",
+    "timeout_seconds": 10
+  }
+}

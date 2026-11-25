@@ -1,21 +1,34 @@
 {
-  "trained_at": "2026-11-25T09:58:58.237754+00:00",
+  "model_version": "model-sim-v002-20261125T141020Z",
+  "trained_at": "2026-11-25T14:10:44.288138+00:00",
+  "dataset_source": "enriched_simulation",
+  "dataset_title_ru": "Обогащённая симуляция проекта",
+  "pilot_proposal_notice": "PROPOSED_PILOT_DEFAULTS_PENDING_BANK_SIGNOFF",
+  "data_manifest_ref": {
+    "dataset_id": "enriched_simulation",
+    "file_path": "data/raw/transactions.parquet",
+    "file_sha256": "21a43d15cbc0df2e4524140dadca4f811aabc8dc277637651768330956902eb6",
+    "source_total_rows": 30000,
+    "load_audit": {
+      "dataset_id": "enriched_simulation",
+      "sampling_mode": "full",
+      "loaded_rows": 30000
+    }
+  },
   "model_backend": "hist_gbdt",
+  "feature_schema_version": "2.0.0-pre-decision",
   "feature_names": [
     "amount",
     "log_amount",
     "hour_of_day",
     "is_night",
     "balance_drain_ratio",
-    "orig_balance_zero_after",
-    "orig_balance_error",
-    "dest_balance_error",
-    "is_foreign_ip",
     "type_TRANSFER",
     "type_CASH_OUT",
     "type_PAYMENT",
     "type_CASH_IN",
     "type_DEBIT",
+    "is_foreign_ip",
     "channel_MOBILE",
     "channel_WEB",
     "channel_API",
@@ -38,21 +51,241 @@
     "dest_tx_count_24h",
     "is_mule_candidate"
   ],
+  "excluded_features": [
+    "orig_balance_zero_after",
+    "orig_balance_error",
+    "dest_balance_error"
+  ],
+  "feature_availability_map": {
+    "amount": {
+      "group": "transactional",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Сумма перевода"
+    },
+    "log_amount": {
+      "group": "transactional",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Логарифм суммы перевода"
+    },
+    "hour_of_day": {
+      "group": "transactional",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Час суток (UTC)"
+    },
+    "is_night": {
+      "group": "transactional",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Ночное время (00:00–05:59 UTC)"
+    },
+    "balance_drain_ratio": {
+      "group": "transactional",
+      "source": "sender_pre_balance",
+      "availability_status": "CONDITIONAL_PRE_DECISION_BALANCE",
+      "description_ru": "Доля суммы от доступного баланса отправителя до операции"
+    },
+    "type_TRANSFER": {
+      "group": "transactional",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Тип операции: перевод (TRANSFER)"
+    },
+    "type_CASH_OUT": {
+      "group": "transactional",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Тип операции: снятие/вывод (CASH_OUT)"
+    },
+    "type_PAYMENT": {
+      "group": "transactional",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Тип операции: платёж мерчанту (PAYMENT)"
+    },
+    "type_CASH_IN": {
+      "group": "transactional",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Тип операции: пополнение счёта (CASH_IN)"
+    },
+    "type_DEBIT": {
+      "group": "transactional",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Тип операции: прямое списание (DEBIT)"
+    },
+    "is_foreign_ip": {
+      "group": "transactional",
+      "source": "extended_telemetry",
+      "availability_status": "VERIFIED_PRE_DECISION_TELEMETRY",
+      "description_ru": "Иностранный IP-адрес"
+    },
+    "channel_MOBILE": {
+      "group": "transactional",
+      "source": "extended_telemetry",
+      "availability_status": "VERIFIED_PRE_DECISION_TELEMETRY",
+      "description_ru": "Канал: мобильное приложение"
+    },
+    "channel_WEB": {
+      "group": "transactional",
+      "source": "extended_telemetry",
+      "availability_status": "VERIFIED_PRE_DECISION_TELEMETRY",
+      "description_ru": "Канал: веб-банк"
+    },
+    "channel_API": {
+      "group": "transactional",
+      "source": "extended_telemetry",
+      "availability_status": "VERIFIED_PRE_DECISION_TELEMETRY",
+      "description_ru": "Канал: API"
+    },
+    "channel_ATM": {
+      "group": "transactional",
+      "source": "extended_telemetry",
+      "availability_status": "VERIFIED_PRE_DECISION_TELEMETRY",
+      "description_ru": "Канал: банкомат"
+    },
+    "orig_tx_count_1h": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Количество исходящих операций клиента за 1 час"
+    },
+    "orig_tx_sum_1h": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Сумма исходящих операций клиента за 1 час"
+    },
+    "orig_tx_count_24h": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Количество исходящих операций клиента за 24 часа"
+    },
+    "orig_tx_sum_24h": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Сумма исходящих операций клиента за 24 часа"
+    },
+    "orig_tx_count_7d": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Количество исходящих операций клиента за 7 дней"
+    },
+    "orig_tx_sum_7d": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Сумма исходящих операций клиента за 7 дней"
+    },
+    "amount_zscore": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Отклонение суммы от прошлой нормы клиента (z-score)"
+    },
+    "amount_to_mean_ratio": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Отношение суммы к прошлому среднему чеку клиента"
+    },
+    "is_new_recipient": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Новый получатель (ранее не встречался у клиента)"
+    },
+    "is_new_device": {
+      "group": "behavioral",
+      "source": "extended_telemetry",
+      "availability_status": "VERIFIED_PRE_DECISION_TELEMETRY",
+      "description_ru": "Новое устройство клиента"
+    },
+    "time_since_last_tx_hours": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Время с прошлой операции клиента (часы)"
+    },
+    "orig_past_tx_count": {
+      "group": "behavioral",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Число прошлых исходящих операций клиента"
+    },
+    "dest_in_degree": {
+      "group": "graph",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Входящая степень P2P-получателя (уникальных отправителей)"
+    },
+    "orig_out_degree": {
+      "group": "graph",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Исходящая степень отправителя (уникальных получателей)"
+    },
+    "device_shared_accounts": {
+      "group": "graph",
+      "source": "extended_telemetry",
+      "availability_status": "VERIFIED_PRE_DECISION_TELEMETRY",
+      "description_ru": "Число других аккаунтов на этом устройстве"
+    },
+    "dest_tx_count_24h": {
+      "group": "graph",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Входящих P2P-переводов получателю за 24 часа"
+    },
+    "is_mule_candidate": {
+      "group": "graph",
+      "source": "paysim_core_point_in_time",
+      "availability_status": "VERIFIED_PRE_DECISION_CORE",
+      "description_ru": "Признак дроппера (высокая входящая степень P2P-получателя)"
+    }
+  },
   "feature_contract": {
+    "schema_version": "2.0.0-pre-decision",
     "timezone": "UTC",
     "naive_datetime_assumption": "UTC",
     "step_fallback_epoch_utc": "2026-01-01T00:00:00+00:00",
     "rolling_window_bounds": "[t - window, t] inclusive (strictly past committed events with ts <= t)",
     "same_timestamp_policy": {
-      "batch": "Deterministic sort by (utc_timestamp, tx_id)",
+      "batch_enriched": "Deterministic sort by (utc_timestamp, tx_id)",
+      "batch_paysim_csv": "Deterministic sort by (step, source_row_idx) via PAYSIM_{row_idx:08d}",
       "online": "Arrival-serialized causal order under RLock"
     },
+    "excluded_leakage_inputs": [
+      "analyst_label",
+      "chargeback",
+      "investigation_result",
+      "isFlaggedFraud",
+      "isFraud",
+      "label_status",
+      "newbalanceDest",
+      "newbalanceOrig",
+      "raw_nameDest",
+      "raw_nameOrig"
+    ],
+    "excluded_post_tx_features_by_default": [
+      "orig_balance_zero_after",
+      "orig_balance_error",
+      "dest_balance_error"
+    ],
+    "paysim_pre_decision_feature_count": 25,
+    "enriched_pre_decision_feature_count": 32,
     "tx_type_semantics": {
-      "CASH_IN": "Credit/deposit to sender; drain=0, orig_zero_after=0, does not increment outgoing spend velocity or P2P mule degree",
-      "PAYMENT": "Outgoing payment to merchant; debits sender, excludes merchant from P2P mule degree, 0 dest_balance_error on unobservable merchant balance",
-      "CASH_OUT": "Outgoing withdrawal; debits sender, 0 dest_balance_error when ATM/agent balance is unchanged",
-      "TRANSFER": "P2P/account transfer; full debit, credit, behavioral, and mule-graph tracking",
-      "DEBIT": "Outgoing direct debit; full sender debit & behavioral tracking"
+      "CASH_IN": "Credit/deposit to sender; drain=0, does not increment outgoing spend velocity or P2P mule degree",
+      "PAYMENT": "Outgoing payment to merchant; debits sender, excludes merchant from P2P mule degree",
+      "CASH_OUT": "Outgoing withdrawal; debits sender, tracked in sender outgoing windows",
+      "TRANSFER": "P2P/account transfer; full sender behavioral and recipient P2P graph tracking",
+      "DEBIT": "Outgoing direct debit; full sender outgoing behavioral tracking"
     },
     "cold_start_defaults": {
       "orig_past_tx_count": 0.0,
@@ -63,6 +296,31 @@
       "is_new_device": 0.0,
       "time_since_last_tx_hours": 168.0
     }
+  },
+  "feature_store_observability": {
+    "schema_version": "2.0.0-pre-decision",
+    "state_origin": "batch_offline_full_dataset",
+    "as_of_timestamp": null,
+    "ingested_events": 30000,
+    "cold_start_events": 600,
+    "cold_start_rate": 0.02,
+    "missing_optional_counts": {},
+    "unique_senders_tracked": 600,
+    "unique_p2p_recipients_tracked": 797,
+    "unique_devices_tracked": 2102,
+    "idempotency_cache_entries": 30000
+  },
+  "calibration_diagnostics": {
+    "method": "sigmoid",
+    "calibration_rows": 3000,
+    "positive_rows": 38,
+    "brier_before": 0.002231,
+    "brier_after": 0.001712,
+    "ece_before": 0.00244,
+    "ece_after": 0.00132,
+    "raw_mean_prob": 0.0149,
+    "calibrated_mean_prob": 0.01265,
+    "empirical_fraud_rate": 0.01267
   },
   "monitored_columns": [
     "amount",
@@ -93,11 +351,12 @@
     "test_max_timestamp": "2026-01-30T23:53:59+00:00"
   },
   "dataset_summary": {
+    "dataset_source": "enriched_simulation",
     "total_rows": 30000,
     "train_rows": 18000,
     "val_rows": 6000,
     "test_rows": 6000,
-    "train_fraud_rate": 0.01167,
+    "train_fraud_rate": 0.011667,
     "val_fraud_rate": 0.0165,
     "test_fraud_rate": 0.0235,
     "scenario_counts": {
@@ -110,42 +369,319 @@
     }
   },
   "optimized_thresholds": {
-    "otp": 0.15,
-    "review": 0.5,
-    "block": 0.7
+    "otp": 0.1,
+    "review": 0.35,
+    "block": 0.6
   },
   "validation_cost_metrics": {
-    "total_fraud_amount": 1191037.17,
-    "fraud_prevented_amount": 1182176.13,
-    "missed_fraud_amount": 8861.04,
-    "false_positive_cost": 2348.0,
-    "total_system_cost": 11209.04,
-    "net_savings": 1179828.13,
-    "savings_rate": 0.9906,
-    "n_allow": 5611,
-    "n_otp": 274,
-    "n_review": 12,
-    "n_block": 103
+    "total_fraud_amount": 843147.86,
+    "fraud_prevented_amount": 835714.07,
+    "missed_fraud_amount": 7433.79,
+    "fraud_amount_capture_rate": 0.9912,
+    "fraud_case_capture_rate": 0.9761,
+    "false_positive_cost": 1025.0,
+    "total_system_cost": 8458.79,
+    "expected_cost_per_tx": 2.8196,
+    "baseline_no_protection_cost": 843147.86,
+    "net_savings": 834689.07,
+    "savings_rate": 0.99,
+    "fp_block_count": 4,
+    "fp_review_count": 3,
+    "fp_per_1000_tx": 2.333,
+    "fp_per_day": 2.38,
+    "review_rate": 0.00167,
+    "daily_review_count": 1.7,
+    "capacity_within_limit": true,
+    "n_allow": 2784,
+    "n_otp": 150,
+    "n_review": 5,
+    "n_block": 61
   },
   "baseline_test_metrics": {
-    "pr_auc": 0.9909,
-    "roc_auc": 0.9997,
-    "recall_at_1pct_fpr": 0.9858,
-    "recall_at_0_5pct_fpr": 0.9858,
+    "pr_auc": 0.9882,
+    "roc_auc": 0.9994,
+    "recall_at_1pct_fpr": 0.9787,
+    "recall_at_0_5pct_fpr": 0.9787,
     "precision_at_50": 1.0,
     "precision_at_100": 1.0,
-    "precision_at_200": 0.695,
+    "precision_at_200": 0.69,
     "total_fraud_amount": 2824069.06,
-    "fraud_prevented_amount": 2819843.42,
-    "missed_fraud_amount": 4225.64,
-    "false_positive_cost": 1985.0,
-    "total_system_cost": 6210.64,
-    "net_savings": 2817858.42,
-    "savings_rate": 0.9978,
-    "n_allow": 5421,
-    "n_otp": 430,
-    "n_review": 9,
-    "n_block": 140
+    "fraud_prevented_amount": 2814587.37,
+    "missed_fraud_amount": 9481.69,
+    "fraud_amount_capture_rate": 0.9966,
+    "fraud_case_capture_rate": 0.9826,
+    "false_positive_cost": 998.0,
+    "total_system_cost": 10479.69,
+    "expected_cost_per_tx": 1.7466,
+    "baseline_no_protection_cost": 2824069.06,
+    "net_savings": 2813589.37,
+    "savings_rate": 0.9963,
+    "fp_block_count": 1,
+    "fp_review_count": 5,
+    "fp_per_1000_tx": 1.0,
+    "fp_per_day": 1.05,
+    "review_rate": 0.002,
+    "daily_review_count": 2.1,
+    "capacity_within_limit": true,
+    "n_allow": 5583,
+    "n_otp": 274,
+    "n_review": 12,
+    "n_block": 131
+  },
+  "temporal_slice_stability": {
+    "pr_auc_bootstrap_ci95": {
+      "low": 0.9766,
+      "high": 0.9979,
+      "n_bootstrap": 100
+    },
+    "slice_pr_auc_mean": 0.9857,
+    "slice_pr_auc_std": 0.0138,
+    "slice_pr_auc_min": 0.9698,
+    "slice_pr_auc_max": 1.0,
+    "slices": [
+      {
+        "slice_index": 1,
+        "rows": 1500,
+        "fraud_count": 27,
+        "fraud_rate": 0.018,
+        "min_step": 582,
+        "max_step": 614,
+        "pr_auc": 0.9987,
+        "recall_at_1pct_fpr": 1.0,
+        "expected_cost_per_tx": 0.4793,
+        "review_rate": 0.00133
+      },
+      {
+        "slice_index": 2,
+        "rows": 1500,
+        "fraud_count": 53,
+        "fraud_rate": 0.03533,
+        "min_step": 614,
+        "max_step": 655,
+        "pr_auc": 1.0,
+        "recall_at_1pct_fpr": 1.0,
+        "expected_cost_per_tx": 1.1511,
+        "review_rate": 0.00333
+      },
+      {
+        "slice_index": 3,
+        "rows": 1500,
+        "fraud_count": 36,
+        "fraud_rate": 0.024,
+        "min_step": 655,
+        "max_step": 686,
+        "pr_auc": 0.9698,
+        "recall_at_1pct_fpr": 0.9444,
+        "expected_cost_per_tx": 1.674,
+        "review_rate": 0.00067
+      },
+      {
+        "slice_index": 4,
+        "rows": 1500,
+        "fraud_count": 25,
+        "fraud_rate": 0.01667,
+        "min_step": 686,
+        "max_step": 719,
+        "pr_auc": 0.9743,
+        "recall_at_1pct_fpr": 0.96,
+        "expected_cost_per_tx": 3.6821,
+        "review_rate": 0.00267
+      }
+    ]
+  },
+  "segmented_test_metrics": {
+    "type": [
+      {
+        "segment": "CASH_IN",
+        "rows": 702,
+        "fraud_count": 0,
+        "fraud_rate": 0.0,
+        "pr_auc": null,
+        "recall_at_1pct_fpr": null,
+        "intervention_recall": null,
+        "review_or_block_rate": 0.0
+      },
+      {
+        "segment": "CASH_OUT",
+        "rows": 1209,
+        "fraud_count": 75,
+        "fraud_rate": 0.06203,
+        "pr_auc": 0.9951,
+        "recall_at_1pct_fpr": 0.9867,
+        "intervention_recall": 1.0,
+        "review_or_block_rate": 0.06203
+      },
+      {
+        "segment": "DEBIT",
+        "rows": 304,
+        "fraud_count": 0,
+        "fraud_rate": 0.0,
+        "pr_auc": null,
+        "recall_at_1pct_fpr": null,
+        "intervention_recall": null,
+        "review_or_block_rate": 0.0
+      },
+      {
+        "segment": "PAYMENT",
+        "rows": 2079,
+        "fraud_count": 0,
+        "fraud_rate": 0.0,
+        "pr_auc": null,
+        "recall_at_1pct_fpr": null,
+        "intervention_recall": null,
+        "review_or_block_rate": 0.0
+      },
+      {
+        "segment": "TRANSFER",
+        "rows": 1706,
+        "fraud_count": 66,
+        "fraud_rate": 0.03869,
+        "pr_auc": 0.9785,
+        "recall_at_1pct_fpr": 0.9697,
+        "intervention_recall": 0.9848,
+        "review_or_block_rate": 0.03986
+      }
+    ],
+    "amount_bucket": [
+      {
+        "segment": "10k-50k",
+        "rows": 87,
+        "fraud_count": 28,
+        "fraud_rate": 0.32184,
+        "pr_auc": 0.9988,
+        "recall_at_1pct_fpr": 0.9643,
+        "intervention_recall": 1.0,
+        "review_or_block_rate": 0.34483
+      },
+      {
+        "segment": "1k-10k",
+        "rows": 2658,
+        "fraud_count": 89,
+        "fraud_rate": 0.03348,
+        "pr_auc": 0.9843,
+        "recall_at_1pct_fpr": 0.9663,
+        "intervention_recall": 0.9888,
+        "review_or_block_rate": 0.03348
+      },
+      {
+        "segment": "<1k",
+        "rows": 3229,
+        "fraud_count": 0,
+        "fraud_rate": 0.0,
+        "pr_auc": null,
+        "recall_at_1pct_fpr": null,
+        "intervention_recall": null,
+        "review_or_block_rate": 0.0
+      },
+      {
+        "segment": ">=50k",
+        "rows": 26,
+        "fraud_count": 24,
+        "fraud_rate": 0.92308,
+        "pr_auc": 1.0,
+        "recall_at_1pct_fpr": 1.0,
+        "intervention_recall": 1.0,
+        "review_or_block_rate": 0.92308
+      }
+    ],
+    "time_segment": [
+      {
+        "segment": "day_06_23_utc",
+        "rows": 5668,
+        "fraud_count": 79,
+        "fraud_rate": 0.01394,
+        "pr_auc": 0.9898,
+        "recall_at_1pct_fpr": 0.9873,
+        "intervention_recall": 1.0,
+        "review_or_block_rate": 0.01447
+      },
+      {
+        "segment": "night_00_05_utc",
+        "rows": 332,
+        "fraud_count": 62,
+        "fraud_rate": 0.18675,
+        "pr_auc": 0.9955,
+        "recall_at_1pct_fpr": 0.9677,
+        "intervention_recall": 0.9839,
+        "review_or_block_rate": 0.18373
+      }
+    ],
+    "channel": [
+      {
+        "segment": "API",
+        "rows": 97,
+        "fraud_count": 39,
+        "fraud_rate": 0.40206,
+        "pr_auc": 1.0,
+        "recall_at_1pct_fpr": 1.0,
+        "intervention_recall": 1.0,
+        "review_or_block_rate": 0.40206
+      },
+      {
+        "segment": "ATM",
+        "rows": 458,
+        "fraud_count": 0,
+        "fraud_rate": 0.0,
+        "pr_auc": null,
+        "recall_at_1pct_fpr": null,
+        "intervention_recall": null,
+        "review_or_block_rate": 0.00218
+      },
+      {
+        "segment": "MOBILE",
+        "rows": 4104,
+        "fraud_count": 59,
+        "fraud_rate": 0.01438,
+        "pr_auc": 0.97,
+        "recall_at_1pct_fpr": 0.9661,
+        "intervention_recall": 0.9831,
+        "review_or_block_rate": 0.01438
+      },
+      {
+        "segment": "WEB",
+        "rows": 1341,
+        "fraud_count": 43,
+        "fraud_rate": 0.03207,
+        "pr_auc": 0.998,
+        "recall_at_1pct_fpr": 1.0,
+        "intervention_recall": 1.0,
+        "review_or_block_rate": 0.03281
+      }
+    ]
+  },
+  "error_analysis": {
+    "false_positives_review_or_block": {
+      "count": 6,
+      "total_amount": 53930.28,
+      "median_amount": 5310.51,
+      "by_type": {
+        "TRANSFER": 5,
+        "CASH_OUT": 1
+      },
+      "cold_start_share": 0.0,
+      "by_scenario": {
+        "legitimate": 6
+      }
+    },
+    "false_negatives_allowed": {
+      "count": 1,
+      "total_amount": 1800.0,
+      "median_amount": 1800.0,
+      "by_type": {
+        "TRANSFER": 1
+      },
+      "cold_start_share": 0.0,
+      "by_scenario": {
+        "velocity_burst": 1
+      }
+    }
+  },
+  "latency_benchmark_ms": {
+    "samples": 150,
+    "mean_ms": 69.48,
+    "p50_ms": 66.5,
+    "p95_ms": 78.27,
+    "p99_ms": 157.24
   },
   "ablations": [
     {
@@ -157,100 +693,300 @@
       "precision_at_100": 0.74,
       "precision_at_200": 0.43,
       "total_fraud_amount": 2824069.06,
-      "fraud_prevented_amount": 2642393.01,
-      "missed_fraud_amount": 181676.05,
-      "false_positive_cost": 7607.0,
-      "total_system_cost": 189283.05,
-      "net_savings": 2634786.01,
-      "savings_rate": 0.933,
+      "fraud_prevented_amount": 2687335.93,
+      "missed_fraud_amount": 136733.13,
+      "fraud_amount_capture_rate": 0.9516,
+      "fraud_case_capture_rate": 0.7872,
+      "false_positive_cost": 40800.0,
+      "total_system_cost": 177533.13,
+      "expected_cost_per_tx": 29.5889,
+      "baseline_no_protection_cost": 2824069.06,
+      "net_savings": 2646535.93,
+      "savings_rate": 0.9371,
+      "fp_block_count": 272,
+      "fp_review_count": 0,
+      "fp_per_1000_tx": 45.333,
+      "fp_per_day": 47.64,
+      "review_rate": 0.0,
+      "daily_review_count": 0.0,
+      "capacity_within_limit": true,
       "n_allow": 5617,
-      "n_otp": 16,
-      "n_review": 303,
-      "n_block": 64,
+      "n_otp": 0,
+      "n_review": 0,
+      "n_block": 383,
       "variant": "1. Rules Only",
       "thresholds": {
-        "otp": 0.15,
-        "review": 0.35,
-        "block": 0.65
-      }
+        "otp": 0.03,
+        "review": 0.1,
+        "block": 0.25
+      },
+      "deployable_pre_decision": true
     },
     {
-      "pr_auc": 0.7881,
-      "roc_auc": 0.9638,
-      "recall_at_1pct_fpr": 0.7589,
-      "recall_at_0_5pct_fpr": 0.7021,
-      "precision_at_50": 1.0,
-      "precision_at_100": 0.87,
-      "precision_at_200": 0.555,
+      "pr_auc": 0.6607,
+      "roc_auc": 0.9506,
+      "recall_at_1pct_fpr": 0.6312,
+      "recall_at_0_5pct_fpr": 0.5177,
+      "precision_at_50": 0.96,
+      "precision_at_100": 0.72,
+      "precision_at_200": 0.485,
       "total_fraud_amount": 2824069.06,
-      "fraud_prevented_amount": 1631812.2,
-      "missed_fraud_amount": 1192256.86,
-      "false_positive_cost": 9598.0,
-      "total_system_cost": 1201854.86,
-      "net_savings": 1622214.2,
-      "savings_rate": 0.5744,
-      "n_allow": 5545,
-      "n_otp": 199,
-      "n_review": 110,
-      "n_block": 146,
-      "variant": "2. Baseline LogReg (Tx Only)",
+      "fraud_prevented_amount": 1883785.33,
+      "missed_fraud_amount": 940283.73,
+      "fraud_amount_capture_rate": 0.667,
+      "fraud_case_capture_rate": 0.861,
+      "false_positive_cost": 18954.0,
+      "total_system_cost": 959237.73,
+      "expected_cost_per_tx": 159.873,
+      "baseline_no_protection_cost": 2824069.06,
+      "net_savings": 1864831.33,
+      "savings_rate": 0.6603,
+      "fp_block_count": 87,
+      "fp_review_count": 126,
+      "fp_per_1000_tx": 35.5,
+      "fp_per_day": 37.3,
+      "review_rate": 0.02267,
+      "daily_review_count": 23.82,
+      "capacity_within_limit": true,
+      "n_allow": 4431,
+      "n_otp": 1252,
+      "n_review": 136,
+      "n_block": 181,
+      "variant": "2. Baseline LogReg (Pre-Decision Tx Only)",
       "thresholds": {
-        "otp": 0.3,
-        "review": 0.65,
-        "block": 0.95
-      }
+        "otp": 0.03,
+        "review": 0.75,
+        "block": 0.9
+      },
+      "deployable_pre_decision": true
     },
     {
-      "pr_auc": 0.9205,
-      "roc_auc": 0.9956,
-      "recall_at_1pct_fpr": 0.8936,
-      "recall_at_0_5pct_fpr": 0.8511,
+      "pr_auc": 0.9202,
+      "roc_auc": 0.9966,
+      "recall_at_1pct_fpr": 0.9078,
+      "recall_at_0_5pct_fpr": 0.844,
       "precision_at_50": 1.0,
       "precision_at_100": 0.98,
-      "precision_at_200": 0.645,
+      "precision_at_200": 0.65,
       "total_fraud_amount": 2824069.06,
-      "fraud_prevented_amount": 2417450.8,
-      "missed_fraud_amount": 406618.26,
-      "false_positive_cost": 3969.0,
-      "total_system_cost": 410587.26,
-      "net_savings": 2413481.8,
-      "savings_rate": 0.8546,
-      "n_allow": 5798,
-      "n_otp": 22,
-      "n_review": 43,
-      "n_block": 137,
-      "variant": "3. Baseline LogReg (All Features)",
+      "fraud_prevented_amount": 2684117.32,
+      "missed_fraud_amount": 139951.74,
+      "fraud_amount_capture_rate": 0.9504,
+      "fraud_case_capture_rate": 0.965,
+      "false_positive_cost": 10911.0,
+      "total_system_cost": 150862.74,
+      "expected_cost_per_tx": 25.1438,
+      "baseline_no_protection_cost": 2824069.06,
+      "net_savings": 2673206.32,
+      "savings_rate": 0.9466,
+      "fp_block_count": 59,
+      "fp_review_count": 73,
+      "fp_per_1000_tx": 22.0,
+      "fp_per_day": 23.12,
+      "review_rate": 0.0135,
+      "daily_review_count": 14.19,
+      "capacity_within_limit": true,
+      "n_allow": 5714,
+      "n_otp": 18,
+      "n_review": 81,
+      "n_block": 187,
+      "variant": "3. Baseline LogReg (All Pre-Decision Features)",
       "thresholds": {
-        "otp": 0.2,
-        "review": 0.35,
-        "block": 0.9
-      }
+        "otp": 0.1,
+        "review": 0.15,
+        "block": 0.7
+      },
+      "deployable_pre_decision": true
     },
     {
-      "pr_auc": 0.9646,
-      "roc_auc": 0.9984,
-      "recall_at_1pct_fpr": 0.9645,
-      "recall_at_0_5pct_fpr": 0.9433,
+      "pr_auc": 0.9459,
+      "roc_auc": 0.9979,
+      "recall_at_1pct_fpr": 0.9291,
+      "recall_at_0_5pct_fpr": 0.8723,
       "precision_at_50": 1.0,
       "precision_at_100": 0.99,
-      "precision_at_200": 0.68,
+      "precision_at_200": 0.67,
       "total_fraud_amount": 2824069.06,
-      "fraud_prevented_amount": 2817070.72,
-      "missed_fraud_amount": 6998.34,
-      "false_positive_cost": 5540.0,
-      "total_system_cost": 12538.34,
-      "net_savings": 2811530.72,
-      "savings_rate": 0.9956,
-      "n_allow": 5527,
-      "n_otp": 270,
-      "n_review": 44,
-      "n_block": 159,
-      "variant": "4. GBDT (hist_gbdt, Tx Only)",
+      "fraud_prevented_amount": 2799942.38,
+      "missed_fraud_amount": 24126.68,
+      "fraud_amount_capture_rate": 0.9915,
+      "fraud_case_capture_rate": 0.9574,
+      "false_positive_cost": 5565.0,
+      "total_system_cost": 29691.68,
+      "expected_cost_per_tx": 4.9486,
+      "baseline_no_protection_cost": 2824069.06,
+      "net_savings": 2794377.38,
+      "savings_rate": 0.9895,
+      "fp_block_count": 29,
+      "fp_review_count": 33,
+      "fp_per_1000_tx": 10.333,
+      "fp_per_day": 10.86,
+      "review_rate": 0.00717,
+      "daily_review_count": 7.53,
+      "capacity_within_limit": true,
+      "n_allow": 5735,
+      "n_otp": 70,
+      "n_review": 43,
+      "n_block": 152,
+      "variant": "4. GBDT (hist_gbdt, Pre-Decision Tx Only)",
       "thresholds": {
-        "otp": 0.15,
-        "review": 0.65,
-        "block": 0.8
-      }
+        "otp": 0.03,
+        "review": 0.1,
+        "block": 0.25
+      },
+      "deployable_pre_decision": true
+    },
+    {
+      "pr_auc": 0.9898,
+      "roc_auc": 0.9997,
+      "recall_at_1pct_fpr": 0.9929,
+      "recall_at_0_5pct_fpr": 0.9787,
+      "precision_at_50": 1.0,
+      "precision_at_100": 1.0,
+      "precision_at_200": 0.7,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2807683.86,
+      "missed_fraud_amount": 16385.2,
+      "fraud_amount_capture_rate": 0.9942,
+      "fraud_case_capture_rate": 0.9672,
+      "false_positive_cost": 712.0,
+      "total_system_cost": 17097.2,
+      "expected_cost_per_tx": 2.8495,
+      "baseline_no_protection_cost": 2824069.06,
+      "net_savings": 2806971.86,
+      "savings_rate": 0.9939,
+      "fp_block_count": 2,
+      "fp_review_count": 12,
+      "fp_per_1000_tx": 2.333,
+      "fp_per_day": 2.45,
+      "review_rate": 0.00267,
+      "daily_review_count": 2.8,
+      "capacity_within_limit": true,
+      "n_allow": 5844,
+      "n_otp": 6,
+      "n_review": 16,
+      "n_block": 134,
+      "variant": "5. GBDT (hist_gbdt, Tx + Behavioral, No Graph)",
+      "thresholds": {
+        "otp": 0.06,
+        "review": 0.1,
+        "block": 0.6
+      },
+      "deployable_pre_decision": true
+    },
+    {
+      "pr_auc": 0.9908,
+      "roc_auc": 0.9997,
+      "recall_at_1pct_fpr": 0.9858,
+      "recall_at_0_5pct_fpr": 0.9787,
+      "precision_at_50": 1.0,
+      "precision_at_100": 1.0,
+      "precision_at_200": 0.695,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2809590.98,
+      "missed_fraud_amount": 14478.08,
+      "fraud_amount_capture_rate": 0.9949,
+      "fraud_case_capture_rate": 0.9732,
+      "false_positive_cost": 699.0,
+      "total_system_cost": 15177.08,
+      "expected_cost_per_tx": 2.5295,
+      "baseline_no_protection_cost": 2824069.06,
+      "net_savings": 2808891.98,
+      "savings_rate": 0.9946,
+      "fp_block_count": 2,
+      "fp_review_count": 9,
+      "fp_per_1000_tx": 1.833,
+      "fp_per_day": 1.93,
+      "review_rate": 0.0025,
+      "daily_review_count": 2.63,
+      "capacity_within_limit": true,
+      "n_allow": 5840,
+      "n_otp": 12,
+      "n_review": 15,
+      "n_block": 133,
+      "variant": "6. GBDT (hist_gbdt, All Pre-Decision Features)",
+      "thresholds": {
+        "otp": 0.06,
+        "review": 0.15,
+        "block": 0.5
+      },
+      "deployable_pre_decision": true
+    },
+    {
+      "pr_auc": 0.3785,
+      "roc_auc": 0.971,
+      "recall_at_1pct_fpr": 0.0,
+      "recall_at_0_5pct_fpr": 0.0,
+      "precision_at_50": 0.4,
+      "precision_at_100": 0.37,
+      "precision_at_200": 0.43,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2807098.64,
+      "missed_fraud_amount": 16970.42,
+      "fraud_amount_capture_rate": 0.994,
+      "fraud_case_capture_rate": 0.9643,
+      "false_positive_cost": 50739.0,
+      "total_system_cost": 67709.42,
+      "expected_cost_per_tx": 11.2849,
+      "baseline_no_protection_cost": 2824069.06,
+      "net_savings": 2756359.64,
+      "savings_rate": 0.976,
+      "fp_block_count": 294,
+      "fp_review_count": 120,
+      "fp_per_1000_tx": 69.0,
+      "fp_per_day": 72.51,
+      "review_rate": 0.0205,
+      "daily_review_count": 21.54,
+      "capacity_within_limit": true,
+      "n_allow": 3679,
+      "n_otp": 1782,
+      "n_review": 123,
+      "n_block": 416,
+      "variant": "7. Isolation Forest Only (Auxiliary Diagnostic)",
+      "thresholds": {
+        "otp": 0.5,
+        "review": 0.85,
+        "block": 0.9
+      },
+      "deployable_pre_decision": false
+    },
+    {
+      "pr_auc": 0.9882,
+      "roc_auc": 0.9994,
+      "recall_at_1pct_fpr": 0.9787,
+      "recall_at_0_5pct_fpr": 0.9787,
+      "precision_at_50": 1.0,
+      "precision_at_100": 1.0,
+      "precision_at_200": 0.69,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2814587.37,
+      "missed_fraud_amount": 9481.69,
+      "fraud_amount_capture_rate": 0.9966,
+      "fraud_case_capture_rate": 0.9826,
+      "false_positive_cost": 998.0,
+      "total_system_cost": 10479.69,
+      "expected_cost_per_tx": 1.7466,
+      "baseline_no_protection_cost": 2824069.06,
+      "net_savings": 2813589.37,
+      "savings_rate": 0.9963,
+      "fp_block_count": 1,
+      "fp_review_count": 5,
+      "fp_per_1000_tx": 1.0,
+      "fp_per_day": 1.05,
+      "review_rate": 0.002,
+      "daily_review_count": 2.1,
+      "capacity_within_limit": true,
+      "n_allow": 5583,
+      "n_otp": 274,
+      "n_review": 12,
+      "n_block": 131,
+      "variant": "8. Full Decision Service (Rules + GBDT + Aux IsoForest)",
+      "thresholds": {
+        "otp": 0.1,
+        "review": 0.35,
+        "block": 0.6
+      },
+      "deployable_pre_decision": true
     },
     {
       "pr_auc": 0.9903,
@@ -263,87 +999,49 @@
       "total_fraud_amount": 2824069.06,
       "fraud_prevented_amount": 2811096.18,
       "missed_fraud_amount": 12972.88,
-      "false_positive_cost": 1091.0,
-      "total_system_cost": 14063.88,
-      "net_savings": 2810005.18,
+      "fraud_amount_capture_rate": 0.9954,
+      "fraud_case_capture_rate": 0.9699,
+      "false_positive_cost": 1012.0,
+      "total_system_cost": 13984.88,
+      "expected_cost_per_tx": 2.3308,
+      "baseline_no_protection_cost": 2824069.06,
+      "net_savings": 2810084.18,
       "savings_rate": 0.995,
-      "n_allow": 5840,
-      "n_otp": 8,
-      "n_review": 13,
+      "fp_block_count": 5,
+      "fp_review_count": 7,
+      "fp_per_1000_tx": 2.0,
+      "fp_per_day": 2.1,
+      "review_rate": 0.00167,
+      "daily_review_count": 1.75,
+      "capacity_within_limit": true,
+      "n_allow": 5845,
+      "n_otp": 6,
+      "n_review": 10,
       "n_block": 139,
-      "variant": "5. GBDT (hist_gbdt, Full Features)",
+      "variant": "9. [LEAKAGE AUDIT - EXCLUDED] GBDT + Post-Tx Balances",
       "thresholds": {
-        "otp": 0.25,
-        "review": 0.35,
-        "block": 0.75
-      }
-    },
-    {
-      "pr_auc": 0.5156,
-      "roc_auc": 0.9876,
-      "recall_at_1pct_fpr": 0.0,
-      "recall_at_0_5pct_fpr": 0.0,
-      "precision_at_50": 0.48,
-      "precision_at_100": 0.54,
-      "precision_at_200": 0.54,
-      "total_fraud_amount": 2824069.06,
-      "fraud_prevented_amount": 2822637.9,
-      "missed_fraud_amount": 1431.16,
-      "false_positive_cost": 39053.0,
-      "total_system_cost": 40484.16,
-      "net_savings": 2783584.9,
-      "savings_rate": 0.9857,
-      "n_allow": 3712,
-      "n_otp": 1539,
-      "n_review": 449,
-      "n_block": 300,
-      "variant": "6. Isolation Forest Only",
-      "thresholds": {
-        "otp": 0.5,
-        "review": 0.75,
-        "block": 0.95
-      }
-    },
-    {
-      "pr_auc": 0.9909,
-      "roc_auc": 0.9997,
-      "recall_at_1pct_fpr": 0.9858,
-      "recall_at_0_5pct_fpr": 0.9858,
-      "precision_at_50": 1.0,
-      "precision_at_100": 1.0,
-      "precision_at_200": 0.695,
-      "total_fraud_amount": 2824069.06,
-      "fraud_prevented_amount": 2819843.42,
-      "missed_fraud_amount": 4225.64,
-      "false_positive_cost": 1985.0,
-      "total_system_cost": 6210.64,
-      "net_savings": 2817858.42,
-      "savings_rate": 0.9978,
-      "n_allow": 5421,
-      "n_otp": 430,
-      "n_review": 9,
-      "n_block": 140,
-      "variant": "7. Full AI Agent (Rules + GBDT + IsoForest)",
-      "thresholds": {
-        "otp": 0.15,
-        "review": 0.5,
-        "block": 0.7
-      }
+        "otp": 0.06,
+        "review": 0.1,
+        "block": 0.25
+      },
+      "deployable_pre_decision": false
     }
   ],
   "train_vs_test_drift": {
     "overall_status": "CRITICAL",
+    "psi_policy_note": "PSI indicates input/score shift for analyst & DS investigation; does not auto-publish retrained models.",
     "n_reference": 18000,
     "n_current": 6000,
     "n_critical": 2,
-    "n_warning": 3,
+    "n_warning": 2,
+    "current_action_shares": {},
     "features": [
       {
         "feature": "risk_score",
-        "psi": 0.7152,
+        "psi": 0.494,
         "status": "CRITICAL",
-        "ref_mean": 0.0473,
-        "cur_mean": 0.0788
+        "ref_mean": 0.0283,
+        "cur_mean": 0.0477
       },
       {
         "feature": "dest_in_degree",
@@ -367,18 +1065,18 @@
         "cur_mean": 0.3142
       },
       {
-        "feature": "ml_score",
-        "psi": 0.1258,
-        "status": "WARNING",
-        "ref_mean": 0.0181,
-        "cur_mean": 0.0271
-      },
-      {
         "feature": "is_new_recipient",
         "psi": 0.0882,
         "status": "OK",
         "ref_mean": 0.3006,
         "cur_mean": 0.1753
+      },
+      {
+        "feature": "ml_score",
+        "psi": 0.028,
+        "status": "OK",
+        "ref_mean": 0.0129,
+        "cur_mean": 0.0226
       },
       {
         "feature": "device_shared_accounts",
@@ -422,6 +1120,22 @@
         "ref_mean": 0.084,
         "cur_mean": 0.092
       }
+    ]
+  },
+  "config_sha256_short": "487039e6f74a87b1",
+  "comparison_vs_champion": {
+    "candidate_version": "model-sim-v002-20261125T141020Z",
+    "champion_version": "model-paysim-v001-20261125T140942Z",
+    "same_dataset_source": false,
+    "candidate_pr_auc": 0.9882,
+    "champion_pr_auc": 0.9984,
+    "pr_auc_delta": -0.0102,
+    "pr_auc_ratio": 0.9898,
+    "val_net_savings_delta": -10154678.64,
+    "candidate_capacity_within_limit": true,
+    "guardrail_passed": true,
+    "reasons": [
+      "All quality and capacity guardrails passed."
     ]
   }
 }

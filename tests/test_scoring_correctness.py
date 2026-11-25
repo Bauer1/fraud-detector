@@ -330,35 +330,45 @@ class TestRetrainHoldoutProtection(unittest.TestCase):
             temp_storage.save_scored_transaction(tx_payload, fake_decision, {})
             temp_storage.record_feedback(str(row["tx_id"]), bool(row["isFraud"]), analyst_id="test_analyst")
 
-        # Save & restore production artifacts metadata around test retrain
+        import tempfile
+        from pathlib import Path
+        from src.models.registry import ModelRegistry
+
         artifacts_dir = resolve_path(cfg["paths"]["artifacts_dir"])
         backup_files = {
             name: (artifacts_dir / name).read_bytes()
             for name in ["gbdt_model.joblib", "anomaly_detector.joblib", "background_median.joblib", "metadata.json"]
             if (artifacts_dir / name).exists()
         }
-        try:
-            # 1. Default strict protection: blocks all 5 test cases from entering X_train
-            res_strict = retrain_with_feedback(cfg=cfg, storage=temp_storage)
-            self.assertEqual(res_strict["feedback_samples_total"], 5)
-            self.assertEqual(res_strict["feedback_excluded_holdout"], 5)
-            self.assertEqual(res_strict["feedback_samples_used"], 0)
-            self.assertTrue(res_strict["is_independent_test"])
-            self.assertFalse(res_strict["original_test_invalidated"])
-            self.assertIsNotNone(res_strict["test_metrics"])
+        with tempfile.TemporaryDirectory() as tmp_reg_dir:
+            temp_registry = ModelRegistry(
+                registry_dir=Path(tmp_reg_dir) / "registry",
+                active_artifacts_dir=Path(tmp_reg_dir) / "active",
+            )
+            try:
+                # 1. Default strict protection: blocks all 5 test cases from entering X_train
+                res_strict = retrain_with_feedback(cfg=cfg, storage=temp_storage, registry=temp_registry)
+                self.assertEqual(res_strict["feedback_samples_total"], 5)
+                self.assertEqual(res_strict["feedback_excluded_holdout"], 5)
+                self.assertEqual(res_strict["feedback_samples_used"], 0)
+                self.assertTrue(res_strict["is_independent_test"])
+                self.assertFalse(res_strict["original_test_invalidated"])
+                self.assertIsNotNone(res_strict["test_metrics"])
 
-            # 2. Explicit adaptation mode: refuses to report contaminated test_metrics as independent test
-            res_adapt = retrain_with_feedback(cfg=cfg, storage=temp_storage, allow_holdout_feedback=True)
-            self.assertEqual(res_adapt["feedback_samples_used"], 5)
-            self.assertFalse(res_adapt["is_independent_test"])
-            self.assertTrue(res_adapt["original_test_invalidated"])
-            self.assertIsNone(res_adapt["test_metrics"])
-            self.assertEqual(res_adapt["evaluation_scope"], "post_feedback_future_slice_only")
-            self.assertIsNotNone(res_adapt["future_slice_metrics"])
-        finally:
-            temp_storage.close()
-            for name, raw_bytes in backup_files.items():
-                (artifacts_dir / name).write_bytes(raw_bytes)
+                # 2. Explicit adaptation mode: refuses to report contaminated test_metrics as independent test
+                res_adapt = retrain_with_feedback(
+                    cfg=cfg, storage=temp_storage, allow_holdout_feedback=True, registry=temp_registry
+                )
+                self.assertEqual(res_adapt["feedback_samples_used"], 5)
+                self.assertFalse(res_adapt["is_independent_test"])
+                self.assertTrue(res_adapt["original_test_invalidated"])
+                self.assertIsNone(res_adapt["test_metrics"])
+                self.assertEqual(res_adapt["evaluation_scope"], "post_feedback_future_slice_only")
+                self.assertIsNotNone(res_adapt["future_slice_metrics"])
+            finally:
+                temp_storage.close()
+                for name, raw_bytes in backup_files.items():
+                    (artifacts_dir / name).write_bytes(raw_bytes)
 
 
 if __name__ == "__main__":

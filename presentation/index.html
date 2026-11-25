@@ -353,369 +353,156 @@
       </div>
     </section>
 
-    <!-- SLIDE 2: PROBLEM -->
+    <!-- SLIDE 2: PROBLEM & ARCHITECTURE -->
     <section class="slide">
-      <span class="tag">01 · Постановка задачи</span>
-      <h2>Почему антифрод — это агентная система, а не одна модель</h2>
-      <div class="grid-2">
+      <span class="tag">01 · Постановка задачи и архитектура</span>
+      <h2>Почему антифрод — это агентный пайплайн, а не одна модель</h2>
+      <div class="grid-2" style="margin-bottom: 18px;">
         <div class="card red">
-          <h3>Ограничения наивного подхода</h3>
+          <h3>Почему одной ML-модели мало</h3>
           <ul>
-            <li><strong>Сильный дисбаланс классов</strong>: мошенничество составляет ~1–2%, поэтому Accuracy бессмысленна.</li>
-            <li><strong>Асимметричная цена ошибки</strong>: пропущенный фрод стоит всей суммы перевода, а ложная блокировка ведёт к оттоку клиента.</li>
-            <li><strong>Чёрный ящик</strong>: аналитику недостаточно числа «0.87» — нужны конкретные причины и контекст.</li>
-            <li><strong>Адаптивность мошенников</strong>: новые схемы ломают статическую модель (дрейф концепции).</li>
+            <li>Сильный дисбаланс (~1.5% фрода, Accuracy бессмысленна) и асимметричная цена ошибки.</li>
+            <li>Нужна объяснимость для аналитиков и защита от новых схем (дрейф концепции).</li>
           </ul>
         </div>
         <div class="card green">
-          <h3>Многоуровневый ИИ-агент</h3>
+          <h3>Ключевые инженерные гарантии</h3>
           <ul>
-            <li><strong>Уровень 1 — Движок правил</strong>: мгновенные жёсткие лимиты, чёрные списки и графовые эвристики.</li>
-            <li><strong>Уровень 2 — ML + Аномалии</strong>: GBDT для известных паттернов + Isolation Forest для новых схем.</li>
-            <li><strong>Уровень 3 — Решающий слой</strong>: выбор действия (<code>ALLOW / OTP / REVIEW / BLOCK</code>) по бизнес-стоимости и объяснение через SHAP (+ опционально LLM).</li>
-            <li><strong>Цикл обратной связи</strong>: разметка аналитиков в Streamlit → дообучение + контроль PSI.</li>
+            <li>Единый <code>OnlineFeatureStore</code> в обучении и продакшене исключает training-serving skew.</li>
+            <li>Риск: <code>0.65·ML + 0.25·Rules + 0.10·Anomaly</code> (+ буст &gt; 0.85, блок по чёрным спискам).</li>
           </ul>
         </div>
       </div>
-    </section>
-
-    <!-- SLIDE 3: ARCHITECTURE -->
-    <section class="slide">
-      <span class="tag">02 · Архитектура системы</span>
-      <h2>Сквозной пайплайн скоринга и обратной связи</h2>
       <div class="arch-flow">
         <div class="arch-step">
-          <h4>1. Поток и валидация</h4>
-          <p>Имитация потока транзакций (<code>replay.py</code>) → FastAPI + Pydantic → Parquet / SQLite (PostgreSQL).</p>
+          <h4>1. Поток и API</h4>
+          <p><code>replay.py</code> → FastAPI + Pydantic → SQLite / Parquet.</p>
         </div>
         <div class="arch-step">
-          <h4>2. Признаки (Leak-Free)</h4>
-          <p><code>OnlineFeatureStore</code>: окна 1ч/24ч/7д, z-score клиента, новый получатель/устройство, граф (NetworkX).</p>
+          <h4>2. Признаки</h4>
+          <p><code>OnlineFeatureStore</code>: 35 признаков без утечек.</p>
         </div>
         <div class="arch-step l2">
-          <h4>3. Скоринг (3 сигнала)</h4>
-          <p>Rule Engine + GBDT (балансировка классов) + Isolation Forest на легитимных операциях.</p>
+          <h4>3. Скоринг</h4>
+          <p>Rule Engine + GBDT + Isolation Forest.</p>
         </div>
         <div class="arch-step l3">
-          <h4>4. Решающий агент</h4>
-          <p>Композитный риск → <code>ALLOW / OTP / REVIEW / BLOCK</code> + SHAP-факторы и резюме кейса.</p>
+          <h4>4. Решение</h4>
+          <p><code>ALLOW / OTP / REVIEW / BLOCK</code> + SHAP.</p>
         </div>
         <div class="arch-step l4">
-          <h4>5. Аналитик и MLOps</h4>
-          <p>Streamlit-дашборд, разметка кейсов (<code>/feedback</code>), мониторинг PSI (<code>/drift</code>) и дообучение (<code>/retrain</code>).</p>
-        </div>
-      </div>
-      <div class="grid-3" style="margin-top: 22px;">
-        <div class="card accent">
-          <h3>Единый код признаков</h3>
-          <p>Идентичное вычисление признаков в обучении и в онлайн-API исключает training-serving skew.</p>
-        </div>
-        <div class="card purple">
-          <h3>Формула риска агента</h3>
-          <p><code>risk = 0.65·ML + 0.25·Rules + 0.10·Anomaly</code> + буст при аномалии &gt; 0.85 и жёсткий блок по чёрным спискам.</p>
-        </div>
-        <div class="card green">
-          <h3>Готовность к деплою</h3>
-          <p>Упаковано в <code>Dockerfile</code> и <code>docker-compose.yml</code> (API :8000 + Dashboard :8501), покрыто тестами.</p>
+          <h4>5. MLOps</h4>
+          <p>Streamlit, <code>/feedback</code>, PSI и <code>/retrain</code>.</p>
         </div>
       </div>
     </section>
 
-    <!-- SLIDE 4: DATA & SIMULATOR -->
+    <!-- SLIDE 3: DATA & LEAK-FREE FEATURES -->
     <section class="slide">
-      <span class="tag">03 · Данные и методология</span>
-      <h2>Симулятор (PaySim-формат) и строгое разбиение по времени</h2>
+      <span class="tag">02 · Данные и признаки (Leak-Free)</span>
+      <h2>Симулятор PaySim (30 000 tx) и 35 признаков без утечек</h2>
       <div class="grid-2-wide">
         <div class="chart-box">
           <img src="assets/fraud_by_day.png" alt="Динамика доли мошенничества по дням" />
         </div>
         <div>
           <div class="card accent" style="margin-bottom: 14px;">
-            <h3>30 000 транзакций · 30 дней · 1.50% фрода</h3>
+            <h3>Симулятор и разбиение по времени</h3>
             <ul>
-              <li><code>account_takeover</code> (захват аккаунта): <strong>135</strong></li>
-              <li><code>mule_chain</code> (дропперы, общие устройства): <strong>103</strong></li>
-              <li><code>velocity_burst</code> (серии за 1 час): <strong>99</strong></li>
-              <li><code>anomalous_amount</code> (аномальная сумма): <strong>67</strong></li>
-              <li><code>novel_api_cashout</code> (дрейф в Test): <strong>46</strong></li>
+              <li>30 000 tx за 30 дней, фрод <strong>1.50%</strong> (450 кейсов, 5 сценариев + дрейф <code>novel_api_cashout</code> в Test).</li>
+              <li>~4% «сложных легитимных» переводов + строгий time split: <strong>Train 60% / Val 20% / Test 20%</strong>.</li>
             </ul>
           </div>
-          <div class="card amber">
-            <h3>Реалистичность и честность оценки</h3>
-            <p>Добавлено ~4% «сложных легитимных» переводов (крупные суммы, ночные операции, обнуление счёта). Разбиение строго по времени: <strong>Train 60% / Val 20% / Test 20%</strong>.</p>
+          <div class="card purple">
+            <h3>35 признаков (тест <code>TestFeatureLeakage</code>)</h3>
+            <ul>
+              <li><strong>Транзакционные (18)</strong>: сумма, час/ночь, drain ratio, ошибки баланса, IP, тип, канал.</li>
+              <li><strong>Поведенческие (12)</strong>: окна 1ч/24ч/7д, z-score (Welford), новизна получателя/устройства.</li>
+              <li><strong>Графовые (5)</strong>: <code>dest_in_degree</code>, <code>orig_out_degree</code>, общие устройства, <code>is_mule_candidate</code>.</li>
+            </ul>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- SLIDE 5: FEATURE ENGINEERING -->
+    <!-- SLIDE 4: ABLATIONS, POLICY & BUSINESS IMPACT -->
     <section class="slide">
-      <span class="tag">04 · Конструирование признаков</span>
-      <h2>35 признаков без утечки будущих данных (OnlineFeatureStore)</h2>
+      <span class="tag">03 · Качество, политика действий и бизнес-эффект</span>
+      <h2>Абляции на Test Set (6 000 tx) и 4-уровневый отклик</h2>
+      <div class="chart-box" style="margin-bottom: 14px;">
+        <img src="assets/ablation_comparison.png" alt="Абляции: PR-AUC и Net Savings" style="max-height: 310px;" />
+      </div>
       <div class="grid-2">
         <div class="card accent">
-          <h3>Транзакционные (18)</h3>
+          <h3>4 уровня действий (пороги по стоимости на Val)</h3>
           <ul>
-            <li><code>amount</code>, <code>log_amount</code>, <code>hour_of_day</code>, <code>is_night</code></li>
-            <li><code>balance_drain_ratio</code>, <code>orig_balance_zero_after</code></li>
-            <li><code>orig_balance_error</code>, <code>dest_balance_error</code>, <code>is_foreign_ip</code></li>
-            <li>One-hot: <code>type</code> (TRANSFER, CASH_OUT, PAYMENT, CASH_IN, DEBIT) и <code>channel</code> (MOBILE, WEB, API, ATM)</li>
+            <li><span class="badge b-allow">ALLOW</span> &lt; 0.20 · <span class="badge b-otp">OTP</span> 0.20–0.40 · <span class="badge b-review">REVIEW</span> 0.40–0.70 · <span class="badge b-block">BLOCK</span> &ge; 0.70 / Rule.</li>
+            <li>Поведенческие и графовые признаки подняли LogReg с <strong>0.8135</strong> до <strong>0.9589</strong> и снизили FP-затраты GBDT в 5 раз.</li>
           </ul>
-        </div>
-        <div class="card purple">
-          <h3>Поведенческие и отклонения (12)</h3>
-          <ul>
-            <li>Скользящие окна по прошлым операциям: <code>1ч</code>, <code>24ч</code>, <code>7д</code> (счётчик и сумма)</li>
-            <li>Отклонение от профиля клиента (Welford): <code>amount_zscore</code>, <code>amount_to_mean_ratio</code></li>
-            <li>Новизна: <code>is_new_recipient</code>, <code>is_new_device</code>, <code>time_since_last_tx_hours</code></li>
-          </ul>
-        </div>
-      </div>
-      <div class="card green" style="margin-top: 18px;">
-        <h3>Графовые признаки (5 · инкрементальный расчёт + NetworkX)</h3>
-        <p>
-          <code>dest_in_degree</code> (число уникальных отправителей на получателя) ·
-          <code>orig_out_degree</code> ·
-          <code>device_shared_accounts</code> (общие устройства у разных аккаунтов) ·
-          <code>dest_tx_count_24h</code> ·
-          <code>is_mule_candidate</code>.
-          Отсутствие утечек подтверждено автоматическим юнит-тестом <code>TestFeatureLeakage</code>.
-        </p>
-      </div>
-    </section>
-
-    <!-- SLIDE 6: MODELING & DECISION POLICY -->
-    <section class="slide">
-      <span class="tag">05 · Моделирование и решающий слой</span>
-      <h2>Ансамбль сигналов и 4-уровневая политика действий</h2>
-      <div class="grid-3">
-        <div class="card accent">
-          <h3>Level 1: Rule Engine</h3>
-          <p>Чёрные списки аккаунтов/устройств, лимит &ge; 250k, velocity &ge; 6/ч, опустошение счёта &ge; 95%, общие устройства (&ge; 3), дропперы (&ge; 5 отправителей).</p>
-        </div>
-        <div class="card purple">
-          <h3>Level 2: GBDT + IsoForest</h3>
-          <p><strong>GBDT</strong> (LightGBM / HistGBDT с <code>class_weight="balanced"</code>) оценивает вероятность фрода. <strong>Isolation Forest</strong> обучается только на норме для ловли новых схем.</p>
         </div>
         <div class="card green">
-          <h3>Level 3: Cost Thresholds</h3>
-          <p>Пороги оптимизированы на Validation-выборке по ожидаемой бизнес-стоимости: пропущенный фрод = сумма перевода; OTP = 2; REVIEW = 25; ложный BLOCK = 150.</p>
-        </div>
-      </div>
-      <div class="grid-4" style="margin-top: 22px;">
-        <div class="card">
-          <span class="badge b-allow">ALLOW</span>
-          <h3 style="margin-top: 10px;">risk &lt; 0.20</h3>
-          <p>Мгновенное проведение без трения для клиента.</p>
-        </div>
-        <div class="card">
-          <span class="badge b-otp">OTP</span>
-          <h3 style="margin-top: 10px;">0.20 &le; risk &lt; 0.40</h3>
-          <p>Доп. подтверждение (SMS/Push), низкая стоимость трения.</p>
-        </div>
-        <div class="card">
-          <span class="badge b-review">REVIEW</span>
-          <h3 style="margin-top: 10px;">0.40 &le; risk &lt; 0.70</h3>
-          <p>Удержание и передача кейса в очередь аналитика с SHAP.</p>
-        </div>
-        <div class="card">
-          <span class="badge b-block">BLOCK</span>
-          <h3 style="margin-top: 10px;">risk &ge; 0.70 / Hard Rule</h3>
-          <p>Автоматическая блокировка критически рискового перевода.</p>
+          <h3>Финансовый итог полного ИИ-агента (Test Set)</h3>
+          <ul>
+            <li>PR-AUC <strong>0.9745</strong> | Precision@100 <strong>0.9900</strong> (против 0.5622 у Rules Only).</li>
+            <li>Предотвращено <strong>2 806 239</strong> из <strong>2 824 069</strong> (<strong>99.31%</strong>), затраты FP: <strong>1 543</strong>, чистая экономия: <strong>2 804 696</strong> при 13 <code>REVIEW</code>.</li>
+          </ul>
         </div>
       </div>
     </section>
 
-    <!-- SLIDE 7: ABLATIONS -->
+    <!-- SLIDE 5: EXPLAINABILITY, DASHBOARD & MLOPS -->
     <section class="slide">
-      <span class="tag">06 · Оценка качества и абляции</span>
-      <h2>Сравнение вариантов системы (Test Set, 6 000 транзакций)</h2>
-      <div class="chart-box" style="margin-bottom: 14px;">
-        <img src="assets/ablation_comparison.png" alt="Абляции: PR-AUC и Net Savings" style="max-height: 330px;" />
+      <span class="tag">04 · Объяснимость и MLOps-мониторинг</span>
+      <h2>SHAP для аналитика, Streamlit-дашборд, PSI и дообучение</h2>
+      <div class="grid-2" style="margin-bottom: 14px;">
+        <div class="chart-box">
+          <img src="assets/shap_case_example.png" alt="SHAP-объяснение кейса" style="max-height: 295px;" />
+        </div>
+        <div class="chart-box">
+          <img src="assets/psi_drift.png" alt="PSI мониторинг дрейфа" style="max-height: 295px;" />
+        </div>
       </div>
-      <div class="grid-3" style="margin-top: 0;">
-        <div class="card accent">
-          <h3>+0.145 PR-AUC от признаков</h3>
-          <p>Поведенческие и графовые признаки подняли LogReg с <strong>0.8135</strong> до <strong>0.9589</strong> и снизили затраты FP для GBDT почти в 5 раз.</p>
-        </div>
-        <div class="card amber">
-          <h3>Одни правила слабы</h3>
-          <p><code>Rules Only</code> дают PR-AUC <strong>0.5622</strong>, Recall@1%FPR <strong>51.8%</strong> и 498 ручных проверок вместо 13 у агента.</p>
-        </div>
+      <div class="grid-2">
         <div class="card purple">
-          <h3>Полный ИИ-агент</h3>
-          <p>PR-AUC <strong>0.9745</strong>, Precision@100 <strong>0.99</strong>, чистая экономия <strong>2.80 млн</strong> + защита от чёрных списков и аномалий.</p>
+          <h3>SHAP + LLM и Streamlit-дашборд</h3>
+          <ul>
+            <li>Топ-5 факторов SHAP на русском языке (+ опциональное LLM-резюме строго поверх SHAP).</li>
+            <li>Дашборд: очередь алертов, разметка, PSI, абляции и ручной симулятор.</li>
+          </ul>
+        </div>
+        <div class="card red">
+          <h3>Дрейф PSI (CRITICAL) и Feedback Loop</h3>
+          <ul>
+            <li>PSI поймал сдвиг в Test: <code>dest_in_degree</code> = <strong>2.003</strong>, <code>risk_score</code> = <strong>0.741</strong> (схема <code>novel_api_cashout</code>).</li>
+            <li>Разметка (<code>/feedback</code>) → БД → <code>/retrain</code> дообучает модели с весом свежих меток 3×.</li>
+          </ul>
         </div>
       </div>
     </section>
 
-    <!-- SLIDE 8: BUSINESS COST TABLE -->
+    <!-- SLIDE 6: RISKS & CHECKLIST -->
     <section class="slide">
-      <span class="tag">07 · Финансовый эффект</span>
-      <h2>Детальные метрики качества и бизнес-стоимости (Test Set)</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Вариант системы</th>
-            <th class="num">PR-AUC</th>
-            <th class="num">Rec@1%FPR</th>
-            <th class="num">P@100</th>
-            <th class="num">Предотвращено</th>
-            <th class="num">Затраты FP</th>
-            <th class="num">Net Savings</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>1. Rules Only</td>
-            <td class="num">0.5622</td>
-            <td class="num">0.5177</td>
-            <td class="num">0.7400</td>
-            <td class="num">2 642 393</td>
-            <td class="num">12 624</td>
-            <td class="num">2 629 769</td>
-          </tr>
-          <tr>
-            <td>2. Baseline LogReg (Tx Only)</td>
-            <td class="num">0.8135</td>
-            <td class="num">0.7660</td>
-            <td class="num">0.9000</td>
-            <td class="num">1 875 759</td>
-            <td class="num">10 120</td>
-            <td class="num">1 865 639</td>
-          </tr>
-          <tr>
-            <td>3. Baseline LogReg (All Features)</td>
-            <td class="num">0.9589</td>
-            <td class="num">0.9645</td>
-            <td class="num">0.9800</td>
-            <td class="num">2 788 031</td>
-            <td class="num">2 591</td>
-            <td class="num">2 785 440</td>
-          </tr>
-          <tr>
-            <td>4. GBDT (Tx Only)</td>
-            <td class="num">0.9660</td>
-            <td class="num">0.9504</td>
-            <td class="num">1.0000</td>
-            <td class="num">2 817 788</td>
-            <td class="num">6 619</td>
-            <td class="num">2 811 169</td>
-          </tr>
-          <tr>
-            <td>5. GBDT (Full Features)</td>
-            <td class="num"><strong>0.9876</strong></td>
-            <td class="num"><strong>0.9929</strong></td>
-            <td class="num"><strong>1.0000</strong></td>
-            <td class="num">2 804 927</td>
-            <td class="num"><strong>1 329</strong></td>
-            <td class="num">2 803 598</td>
-          </tr>
-          <tr>
-            <td>6. Isolation Forest Only</td>
-            <td class="num">0.5199</td>
-            <td class="num">0.0000</td>
-            <td class="num">0.6000</td>
-            <td class="num">2 810 960</td>
-            <td class="num">30 553</td>
-            <td class="num">2 780 407</td>
-          </tr>
-          <tr class="highlight">
-            <td>7. Full AI Agent (Rules + GBDT + IsoForest)</td>
-            <td class="num">0.9745</td>
-            <td class="num">0.9716</td>
-            <td class="num">0.9900</td>
-            <td class="num">2 806 239</td>
-            <td class="num">1 543</td>
-            <td class="num">2 804 696</td>
-          </tr>
-        </tbody>
-      </table>
-      <p style="margin-top: 16px; font-size: 15.5px;">
-        Общий объём фрода на тестовой выборке: <strong>2 824 069</strong>. Полный агент сохраняет <strong>99.31%</strong> суммы при всего <strong>13</strong> ручных проверках (<code>REVIEW</code>) и <strong>137</strong> блокировках (<code>BLOCK</code>).
-      </p>
-    </section>
-
-    <!-- SLIDE 9: EXPLAINABILITY & DASHBOARD -->
-    <section class="slide">
-      <span class="tag">08 · Объяснимость и интерфейс аналитика</span>
-      <h2>SHAP-разбор кейса, LLM-резюме и дашборд Streamlit</h2>
-      <div class="grid-2-wide">
-        <div class="chart-box">
-          <img src="assets/shap_case_example.png" alt="SHAP-объяснение кейса" />
-        </div>
-        <div>
-          <div class="card purple" style="margin-bottom: 14px;">
-            <h3>Объяснение для каждого алерта</h3>
-            <ul>
-              <li><strong>Топ-5 факторов SHAP</strong> переводятся на понятный язык («сумма в 12× выше средней», «счёт обнулён», «новый получатель»).</li>
-              <li><strong>Опциональный LLM-слой</strong>: получает структурированный SHAP и пишет краткое резюме, <em>не участвуя в скоринге</em>.</li>
-            </ul>
-          </div>
-          <div class="card accent">
-            <h3>4 вкладки Streamlit-дашборда</h3>
-            <ul>
-              <li><strong>Очередь алертов и карточка кейса</strong> + форма разметки.</li>
-              <li><strong>Мониторинг PSI</strong> и кнопка дообучения.</li>
-              <li><strong>Абляции и бизнес-стоимость</strong>.</li>
-              <li><strong>Интерактивный симулятор</strong> ручной проверки перевода.</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- SLIDE 10: DRIFT MONITORING & FEEDBACK LOOP -->
-    <section class="slide">
-      <span class="tag">09 · Мониторинг и MLOps</span>
-      <h2>Детекция дрейфа (PSI) и цикл обратной связи</h2>
-      <div class="grid-2-wide">
-        <div class="chart-box">
-          <img src="assets/psi_drift.png" alt="PSI мониторинг дрейфа" />
-        </div>
-        <div>
-          <div class="card red" style="margin-bottom: 14px;">
-            <h3>Статус дрейфа: CRITICAL</h3>
-            <p>PSI автоматически зафиксировал сдвиг в позднем периоде:</p>
-            <ul>
-              <li><code>dest_in_degree</code>: PSI = <strong>2.003</strong> (рост графа и дроппер-счетов).</li>
-              <li><code>risk_score</code>: PSI = <strong>0.741</strong> (появление новой схемы <code>novel_api_cashout</code>).</li>
-            </ul>
-          </div>
-          <div class="card green">
-            <h3>Цикл обратной связи (Feedback Loop)</h3>
-            <p>
-              Аналитик размечает кейс в дашборде → <code>POST /feedback</code> → сохранение в БД →
-              <code>POST /retrain</code> дообучает GBDT и Isolation Forest с повышенным весом свежих меток (3×) и пересчитывает пороги.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- SLIDE 11: RISKS & CHECKLIST -->
-    <section class="slide">
-      <span class="tag">10 · Риски, ограничения и итоги</span>
-      <h2>Риски внедрения и результаты проекта</h2>
+      <span class="tag">05 · Риски и итоги проекта</span>
+      <h2>Ограничения внедрения и готовность системы</h2>
       <div class="grid-2">
         <div class="card amber">
           <h3>Ключевые риски и меры снижения</h3>
           <ul>
-            <li><strong>Дрейф концепции</strong> → PSI-мониторинг + Isolation Forest + регулярное дообучение.</li>
-            <li><strong>Запаздывающие метки</strong> → учёт лага подтверждения chargeback при формировании обучающего окна.</li>
-            <li><strong>Синтетические данные</strong> → метрики PaySim-симулятора нельзя напрямую переносить на реальный банк без пилота.</li>
-            <li><strong>Ложные срабатывания</strong> → мягкие действия <code>OTP</code> и <code>REVIEW</code> вместо жёсткого бинарного блока.</li>
-            <li><strong>Приватность и справедливость</strong> → псевдонимизация ID, отказ от защищённых атрибутов и PII.</li>
+            <li><strong>Дрейф концепции</strong> → PSI-мониторинг + Isolation Forest + дообучение.</li>
+            <li><strong>Запаздывающие метки</strong> → учёт лага подтверждения chargeback.</li>
+            <li><strong>Синтетические данные</strong> → перед продом необходим пилот на реальных логах.</li>
+            <li><strong>Ложные срабатывания</strong> → мягкие действия <code>OTP</code> и <code>REVIEW</code> вместо жёсткого блока.</li>
+            <li><strong>Приватность и справедливость</strong> → псевдонимизация ID, без PII и защищённых атрибутов.</li>
           </ul>
         </div>
         <div class="card green">
-          <h3>Чек-лист результатов (выполнено 100%)</h3>
+          <h3>Итоги (выполнено 100%)</h3>
           <ul>
-            <li>Воспроизводимый репозиторий с <code>README.md</code> и <code>config.yaml</code></li>
-            <li>Ноутбуки EDA и абляций (<code>01_eda</code>, <code>02_modeling</code>)</li>
-            <li>FastAPI-сервис скоринга, поток <code>replay.py</code>, <code>Dockerfile</code> и <code>docker-compose.yml</code></li>
-            <li>Рабочий Streamlit-дашборд аналитика с предзаполненной БД</li>
-            <li>Отчёт <code>reports/project_report.md</code> + <strong>7/7</strong> пройденных автотестов</li>
+            <li>Воспроизводимый репозиторий (<code>README.md</code>, <code>config.yaml</code>) и 2 ноутбука (EDA и абляции).</li>
+            <li>FastAPI-сервис (<code>:8000</code>), поток <code>replay.py</code>, <code>Dockerfile</code> и <code>docker-compose.yml</code>.</li>
+            <li>Рабочий Streamlit-дашборд (<code>:8501</code>) с предзаполненной БД.</li>
+            <li>Аналитический отчёт <code>project_report.md</code> и руководство <code>user_guide.pdf</code>.</li>
+            <li>Все автотесты пройдены (<strong>7/7 OK</strong>), включая проверку утечек данных.</li>
           </ul>
         </div>
       </div>
@@ -726,7 +513,7 @@
       <div>AI Fraud Detection Agent · Управление: <code>←</code> <code>→</code> <code>Space</code> · Печать в PDF: <code>Ctrl+P</code></div>
       <div class="nav-btns">
         <button id="prevBtn">← Назад</button>
-        <span id="counter" style="min-width: 58px; text-align: center; font-weight: 700; color: #0f172a;">1 / 11</span>
+        <span id="counter" style="min-width: 58px; text-align: center; font-weight: 700; color: #0f172a;">1 / 6</span>
         <button id="nextBtn">Далее →</button>
         <button id="fsBtn">⛶ Полный экран</button>
       </div>

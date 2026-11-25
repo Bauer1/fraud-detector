@@ -173,12 +173,23 @@ class TestMetricsAndDrift(unittest.TestCase):
 
 
 class TestFastAPIService(unittest.TestCase):
-    def test_score_alert_and_feedback_flow(self) -> None:
-        state.load_artifacts()
+    def setUp(self) -> None:
+        from src.data.storage import StorageManager
 
+        self._orig_storage = state.storage
+        state.storage = StorageManager("sqlite:///:memory:")
+        state.load_artifacts(initial_state_mode="empty")
+
+    def tearDown(self) -> None:
+        state.storage.close()
+        state.storage = self._orig_storage
+        state.load_artifacts(initial_state_mode="empty")
+
+    def test_score_alert_and_feedback_flow(self) -> None:
         h = health()
         self.assertEqual(h["status"], "ok")
         self.assertTrue(h["model_loaded"])
+        self.assertEqual(h["feature_store"]["state_origin"], "empty")
 
         tx = TransactionRequest(
             tx_id="TX_TEST_UNIT_001",

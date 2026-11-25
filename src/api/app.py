@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import threading
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any
 
 import joblib
@@ -19,15 +21,27 @@ from src.data.schemas import (
     TransactionRequest,
 )
 from src.data.storage import StorageManager
-from src.features.online_store import ALL_FEATURE_NAMES, OnlineFeatureStore
+from src.features.online_store import (
+    ALL_FEATURE_NAMES,
+    DuplicateTransactionConflictError,
+    FeatureStoreError,
+    OnlineFeatureStore,
+    StaleEventError,
+    canonical_tx_fingerprint,
+)
 from src.monitoring.drift import compute_drift_report, compute_feedback_quality
 from src.rules.engine import RuleEngine
 from src.training.pipeline import run_training_pipeline
 from src.training.retrain import retrain_with_feedback
 
+VALID_INITIAL_STATE_MODES = frozenset({"empty", "operational_db", "pre_test_warmup"})
+
 
 class ServiceState:
+    """Thread-safe container for scoring models, clean online feature state, and persistence."""
+
     def __init__(self) -> None:
+        self._lock = threading.RLock()
         self.cfg: dict[str, Any] = load_config()
         self.storage: StorageManager = StorageManager(self.cfg["paths"]["database_url"])
         self.feature_store: OnlineFeatureStore | None = None
@@ -35,41 +49,183 @@ class ServiceState:
         self.metadata: dict[str, Any] = {}
         self.reference_df: pd.DataFrame = pd.DataFrame()
 
-    def load_artifacts(self) -> None:
+    def _build_initial_feature_store(
+        self,
+        mode: str,
+        as_of: datetime | None = None,
+    ) -> OnlineFeatureStore:
+        if mode not in VALID_INITIAL_STATE_MODES:
+            raise ValueError(f"Unsupported initial_state_mode='{mode}'. Expected one of {sorted(VALID_INITIAL_STATE_MODES)}")
+
+        scoring_cfg = self.cfg.get("scoring", {})
+        mule_th = int(self.cfg["rules"]["mule_in_degree_threshold"])
+        sender_ooo = scoring_cfg.get("max_sender_out_of_order_seconds", 300.0)
+        global_stale = scoring_cfg.get("max_global_staleness_seconds", 86400.0)
+        idem_size = int(scoring_cfg.get("max_idempotency_cache_size", 50000))
+        startup_ts = as_of or datetime.now(timezone.utc)
+
+        if mode == "empty":
+            return OnlineFeatureStore(
+                mule_in_degree_threshold=mule_th,
+                max_sender_out_of_order_sec=sender_ooo,
+                max_global_staleness_sec=global_stale,
+                max_idempotency_entries=idem_size,
+                state_origin="empty",
+                as_of_timestamp=startup_ts.isoformat(),
+            )
+
+        if mode == "operational_db":
+            op_events = self.storage.get_operational_history(as_of=startup_ts)
+            return OnlineFeatureStore.from_history(
+                op_events,
+                as_of_timestamp=startup_ts,
+                mule_in_degree_threshold=mule_th,
+                max_sender_out_of_order_sec=sender_ooo,
+                max_global_staleness_sec=global_stale,
+                max_idempotency_entries=idem_size,
+                state_origin="operational_db",
+            )
+
+        # mode == "pre_test_warmup"
         artifacts_dir = resolve_path(self.cfg["paths"]["artifacts_dir"])
-        gbdt_path = artifacts_dir / "gbdt_model.joblib"
-        if not gbdt_path.exists():
-            # Automatically bootstrap artifacts on first startup if missing
-            run_training_pipeline(cfg=self.cfg)
+        warmup_path = artifacts_dir / "initial_feature_store_pre_test.joblib"
+        if not warmup_path.exists():
+            raise FileNotFoundError(
+                f"Pre-test warm-up store not found at {warmup_path}. Run `python -m src.training.pipeline` first."
+            )
+        store: OnlineFeatureStore = joblib.load(warmup_path)
+        if getattr(store, "state_origin", "") != "pre_test_warmup":
+            raise RuntimeError(
+                f"Refusing to load feature store with untrusted state_origin='{getattr(store, 'state_origin', None)}'"
+            )
+        store.max_sender_out_of_order_sec = sender_ooo
+        store.max_global_staleness_sec = global_stale
+        store.max_idempotency_entries = idem_size
+        return store
 
-        gbdt_model = joblib.load(artifacts_dir / "gbdt_model.joblib")
-        anomaly_detector = joblib.load(artifacts_dir / "anomaly_detector.joblib")
-        background_median = joblib.load(artifacts_dir / "background_median.joblib")
-        self.feature_store = joblib.load(artifacts_dir / "online_feature_store.joblib")
+    def reload_model_artifacts(self) -> None:
+        """Atomically reload model, thresholds, metadata, and reference distribution without resetting live feature state."""
+        with self._lock:
+            artifacts_dir = resolve_path(self.cfg["paths"]["artifacts_dir"])
+            gbdt_path = artifacts_dir / "gbdt_model.joblib"
+            if not gbdt_path.exists():
+                auto_train = bool(self.cfg.get("scoring", {}).get("auto_train_on_startup", False))
+                if auto_train:
+                    run_training_pipeline(cfg=self.cfg)
+                else:
+                    raise FileNotFoundError(
+                        f"Model artifact not found at {gbdt_path}. Run `python -m src.training.pipeline` before starting API."
+                    )
 
-        meta_path = artifacts_dir / "metadata.json"
-        self.metadata = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+            gbdt_model = joblib.load(gbdt_path)
+            anomaly_detector = joblib.load(artifacts_dir / "anomaly_detector.joblib")
+            background_median = joblib.load(artifacts_dir / "background_median.joblib")
 
-        ref_path = artifacts_dir / "reference_distribution.parquet"
-        self.reference_df = pd.read_parquet(ref_path) if ref_path.exists() else pd.DataFrame()
+            meta_path = artifacts_dir / "metadata.json"
+            metadata = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
 
-        thresholds = self.metadata.get("optimized_thresholds", self.cfg["agent"]["thresholds"])
-        rule_engine = RuleEngine(rules_cfg=self.cfg["rules"])
-        explainer = FraudExplainer(
-            ml_model=gbdt_model,
-            feature_names=ALL_FEATURE_NAMES,
-            background_median=background_median,
-            llm_cfg=self.cfg.get("llm", {}),
-        )
-        self.agent = FraudDecisionAgent(
-            rule_engine=rule_engine,
-            ml_model=gbdt_model,
-            anomaly_detector=anomaly_detector,
-            explainer=explainer,
-            weights=self.cfg["agent"]["weights"],
-            thresholds=thresholds,
-            feature_names=ALL_FEATURE_NAMES,
-        )
+            ref_path = artifacts_dir / "reference_distribution.parquet"
+            reference_df = pd.read_parquet(ref_path) if ref_path.exists() else pd.DataFrame()
+
+            thresholds = metadata.get("optimized_thresholds", self.cfg["agent"]["thresholds"])
+            rule_engine = RuleEngine(rules_cfg=self.cfg["rules"])
+            explainer = FraudExplainer(
+                ml_model=gbdt_model,
+                feature_names=ALL_FEATURE_NAMES,
+                background_median=background_median,
+                llm_cfg=self.cfg.get("llm", {}),
+            )
+            new_agent = FraudDecisionAgent(
+                rule_engine=rule_engine,
+                ml_model=gbdt_model,
+                anomaly_detector=anomaly_detector,
+                explainer=explainer,
+                weights=self.cfg["agent"]["weights"],
+                thresholds=thresholds,
+                feature_names=ALL_FEATURE_NAMES,
+            )
+
+            self.agent = new_agent
+            self.metadata = metadata
+            self.reference_df = reference_df
+
+    def load_artifacts(
+        self,
+        *,
+        initial_state_mode: str | None = None,
+        as_of: datetime | None = None,
+    ) -> None:
+        """Load model artifacts and initialize a clean, leak-free OnlineFeatureStore."""
+        with self._lock:
+            self.reload_model_artifacts()
+            mode = initial_state_mode or self.cfg.get("scoring", {}).get("initial_state_mode", "empty")
+            self.feature_store = self._build_initial_feature_store(mode=mode, as_of=as_of)
+
+    def score(self, tx: TransactionRequest) -> ScoreResponse:
+        """Thread-safe, idempotent, event-order-checked transaction scoring with atomic state commit."""
+        with self._lock:
+            if self.agent is None or self.feature_store is None:
+                try:
+                    self.load_artifacts()
+                except FileNotFoundError as exc:
+                    raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+            assert self.agent is not None
+            assert self.feature_store is not None
+
+            tx_dict = tx.model_dump()
+            tx_dict["type"] = tx.type.value
+            tx_dict["channel"] = tx.channel.value
+
+            # 1. Persistent idempotency & conflict check by tx_id
+            existing_rec = self.storage.get_transaction(tx.tx_id)
+            if existing_rec is not None:
+                existing_fp = canonical_tx_fingerprint(existing_rec)
+                incoming_fp = canonical_tx_fingerprint(tx_dict)
+                if existing_fp != incoming_fp:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Conflicting transaction payload for already-scored tx_id='{tx.tx_id}'",
+                    )
+                return ScoreResponse(
+                    tx_id=existing_rec["tx_id"],
+                    action=existing_rec["action"],
+                    risk_score=existing_rec["risk_score"],
+                    ml_score=existing_rec["ml_score"],
+                    rule_score=existing_rec["rule_score"],
+                    anomaly_score=existing_rec["anomaly_score"],
+                    triggered_rules=existing_rec["triggered_rules"],
+                    top_factors=existing_rec["top_factors"],
+                    explanation_summary=existing_rec["explanation_summary"],
+                    latency_ms=existing_rec["latency_ms"],
+                    is_duplicate=True,
+                )
+
+            # 2. Compute features without mutating store yet (validates schema, order, and in-memory tx_id cache)
+            try:
+                in_mem_cached = self.feature_store.get_cached_features(tx_dict)
+                if in_mem_cached is not None:
+                    # Only reachable if custom caller populated store directly outside storage
+                    decision = self.agent.evaluate_transaction(tx_dict, in_mem_cached, explain=True)
+                    return ScoreResponse(**decision, is_duplicate=True)
+
+                features = self.feature_store.compute_features(
+                    tx_dict,
+                    update_state=False,
+                    strict_fields=True,
+                )
+            except DuplicateTransactionConflictError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except (StaleEventError, FeatureStoreError) as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+            # 3. Run multi-layer fraud evaluation
+            decision = self.agent.evaluate_transaction(tx_dict, features, explain=True)
+
+            # 4. Persist to operational DB, then commit OnlineFeatureStore state atomically
+            self.storage.save_scored_transaction(tx_dict, decision, features)
+            self.feature_store.commit_event(tx_dict, features)
+            return ScoreResponse(**decision, is_duplicate=False)
 
 
 state = ServiceState()
@@ -84,38 +240,36 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AI Fraud Detection Agent API",
     description="Многоуровневый ИИ-агент обнаружения мошеннических переводов (Правила + GBDT + Isolation Forest + SHAP).",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {
-        "status": "ok",
-        "model_loaded": state.agent is not None,
-        "model_backend": state.metadata.get("model_backend", "unknown"),
-        "thresholds": {
-            "otp": state.agent.t_otp,
-            "review": state.agent.t_review,
-            "block": state.agent.t_block,
-        } if state.agent else {},
-    }
+    with state._lock:
+        fs = state.feature_store
+        return {
+            "status": "ok",
+            "model_loaded": state.agent is not None,
+            "model_backend": state.metadata.get("model_backend", "unknown"),
+            "feature_store": {
+                "initialized": fs is not None,
+                "state_origin": fs.state_origin if fs else None,
+                "as_of_timestamp": fs.as_of_timestamp if fs else None,
+                "ingested_events": fs.ingested_events if fs else 0,
+            },
+            "thresholds": {
+                "otp": state.agent.t_otp,
+                "review": state.agent.t_review,
+                "block": state.agent.t_block,
+            } if state.agent else {},
+        }
 
 
 @app.post("/score", response_model=ScoreResponse)
 def score_transaction(tx: TransactionRequest) -> ScoreResponse:
-    if state.agent is None or state.feature_store is None:
-        state.load_artifacts()
-
-    tx_dict = tx.model_dump()
-    tx_dict["type"] = tx.type.value
-    tx_dict["channel"] = tx.channel.value
-
-    features = state.feature_store.compute_features(tx_dict, update_state=True)
-    decision = state.agent.evaluate_transaction(tx_dict, features, explain=True)
-    state.storage.save_scored_transaction(tx_dict, decision, features)
-    return ScoreResponse(**decision)
+    return state.score(tx)
 
 
 @app.get("/alerts")
@@ -198,6 +352,6 @@ def get_ablations() -> dict[str, Any]:
 
 @app.post("/retrain")
 def trigger_retrain() -> dict[str, Any]:
-    result = retrain_with_feedback(cfg=state.cfg, storage=state.storage)
-    state.load_artifacts()
-    return result
+    res = retrain_with_feedback(cfg=state.cfg, storage=state.storage)
+    state.reload_model_artifacts()
+    return res

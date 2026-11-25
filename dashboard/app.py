@@ -372,22 +372,28 @@ def main() -> None:
                 "channel": channel,
                 "ip_country": ip_country,
             }
+            result: dict[str, Any] | None = None
             if is_api_up:
                 resp = httpx.post(f"{API_URL}/score", json=tx_payload, timeout=10.0)
-                result = resp.json()
+                if resp.status_code != 200:
+                    st.error(f"Ошибка скоринга ({resp.status_code}): {resp.text}")
+                else:
+                    result = resp.json()
             else:
-                # Local in-process scoring fallback
-                from src.api.app import state as api_state
+                # Local in-process scoring fallback via thread-safe ServiceState
+                from fastapi import HTTPException
+                from src.api.app import score_transaction
+                from src.data.schemas import TransactionRequest
 
-                if api_state.agent is None:
-                    api_state.load_artifacts()
-                feats = api_state.feature_store.compute_features(tx_payload, update_state=True)
-                result = api_state.agent.evaluate_transaction(tx_payload, feats, explain=True)
-                storage.save_scored_transaction(tx_payload, result, feats)
+                try:
+                    result = score_transaction(TransactionRequest(**tx_payload)).model_dump()
+                except HTTPException as exc:
+                    st.error(f"Транзакция отклонена ({exc.status_code}): {exc.detail}")
 
-            st.success(f"Решение: **{result['action']}** | Риск: **{result['risk_score']:.4f}** ({result['latency_ms']} мс)")
-            st.write(result["explanation_summary"])
-            st.json(result)
+            if result is not None:
+                st.success(f"Решение: **{result['action']}** | Риск: **{result['risk_score']:.4f}** ({result['latency_ms']} мс)")
+                st.write(result["explanation_summary"])
+                st.json(result)
 
 
 if __name__ == "__main__":

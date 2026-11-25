@@ -1,0 +1,427 @@
+{
+  "trained_at": "2026-11-25T09:58:58.237754+00:00",
+  "model_backend": "hist_gbdt",
+  "feature_names": [
+    "amount",
+    "log_amount",
+    "hour_of_day",
+    "is_night",
+    "balance_drain_ratio",
+    "orig_balance_zero_after",
+    "orig_balance_error",
+    "dest_balance_error",
+    "is_foreign_ip",
+    "type_TRANSFER",
+    "type_CASH_OUT",
+    "type_PAYMENT",
+    "type_CASH_IN",
+    "type_DEBIT",
+    "channel_MOBILE",
+    "channel_WEB",
+    "channel_API",
+    "channel_ATM",
+    "orig_tx_count_1h",
+    "orig_tx_sum_1h",
+    "orig_tx_count_24h",
+    "orig_tx_sum_24h",
+    "orig_tx_count_7d",
+    "orig_tx_sum_7d",
+    "amount_zscore",
+    "amount_to_mean_ratio",
+    "is_new_recipient",
+    "is_new_device",
+    "time_since_last_tx_hours",
+    "orig_past_tx_count",
+    "dest_in_degree",
+    "orig_out_degree",
+    "device_shared_accounts",
+    "dest_tx_count_24h",
+    "is_mule_candidate"
+  ],
+  "feature_contract": {
+    "timezone": "UTC",
+    "naive_datetime_assumption": "UTC",
+    "step_fallback_epoch_utc": "2026-01-01T00:00:00+00:00",
+    "rolling_window_bounds": "[t - window, t] inclusive (strictly past committed events with ts <= t)",
+    "same_timestamp_policy": {
+      "batch": "Deterministic sort by (utc_timestamp, tx_id)",
+      "online": "Arrival-serialized causal order under RLock"
+    },
+    "tx_type_semantics": {
+      "CASH_IN": "Credit/deposit to sender; drain=0, orig_zero_after=0, does not increment outgoing spend velocity or P2P mule degree",
+      "PAYMENT": "Outgoing payment to merchant; debits sender, excludes merchant from P2P mule degree, 0 dest_balance_error on unobservable merchant balance",
+      "CASH_OUT": "Outgoing withdrawal; debits sender, 0 dest_balance_error when ATM/agent balance is unchanged",
+      "TRANSFER": "P2P/account transfer; full debit, credit, behavioral, and mule-graph tracking",
+      "DEBIT": "Outgoing direct debit; full sender debit & behavioral tracking"
+    },
+    "cold_start_defaults": {
+      "orig_past_tx_count": 0.0,
+      "rolling_counts_and_sums": 0.0,
+      "amount_zscore": 0.0,
+      "amount_to_mean_ratio": 1.0,
+      "is_new_recipient": 0.0,
+      "is_new_device": 0.0,
+      "time_since_last_tx_hours": 168.0
+    }
+  },
+  "monitored_columns": [
+    "amount",
+    "balance_drain_ratio",
+    "orig_tx_count_1h",
+    "orig_tx_count_24h",
+    "amount_zscore",
+    "is_new_recipient",
+    "is_new_device",
+    "dest_in_degree",
+    "device_shared_accounts",
+    "channel_API",
+    "ml_score",
+    "risk_score"
+  ],
+  "initial_state_snapshot": {
+    "artifact": "initial_feature_store_pre_test.joblib",
+    "state_origin": "pre_test_warmup",
+    "as_of_timestamp": "2026-01-25T06:50:26+00:00",
+    "ingested_events": 24000,
+    "contains_test_events": false
+  },
+  "split_boundaries": {
+    "train_max_timestamp": "2026-01-19T09:13:06+00:00",
+    "val_min_timestamp": "2026-01-19T09:13:37+00:00",
+    "val_max_timestamp": "2026-01-25T06:50:26+00:00",
+    "test_min_timestamp": "2026-01-25T06:51:41+00:00",
+    "test_max_timestamp": "2026-01-30T23:53:59+00:00"
+  },
+  "dataset_summary": {
+    "total_rows": 30000,
+    "train_rows": 18000,
+    "val_rows": 6000,
+    "test_rows": 6000,
+    "train_fraud_rate": 0.01167,
+    "val_fraud_rate": 0.0165,
+    "test_fraud_rate": 0.0235,
+    "scenario_counts": {
+      "legitimate": 29550,
+      "account_takeover": 135,
+      "mule_chain": 103,
+      "velocity_burst": 99,
+      "anomalous_amount": 67,
+      "novel_api_cashout": 46
+    }
+  },
+  "optimized_thresholds": {
+    "otp": 0.15,
+    "review": 0.5,
+    "block": 0.7
+  },
+  "validation_cost_metrics": {
+    "total_fraud_amount": 1191037.17,
+    "fraud_prevented_amount": 1182176.13,
+    "missed_fraud_amount": 8861.04,
+    "false_positive_cost": 2348.0,
+    "total_system_cost": 11209.04,
+    "net_savings": 1179828.13,
+    "savings_rate": 0.9906,
+    "n_allow": 5611,
+    "n_otp": 274,
+    "n_review": 12,
+    "n_block": 103
+  },
+  "baseline_test_metrics": {
+    "pr_auc": 0.9909,
+    "roc_auc": 0.9997,
+    "recall_at_1pct_fpr": 0.9858,
+    "recall_at_0_5pct_fpr": 0.9858,
+    "precision_at_50": 1.0,
+    "precision_at_100": 1.0,
+    "precision_at_200": 0.695,
+    "total_fraud_amount": 2824069.06,
+    "fraud_prevented_amount": 2819843.42,
+    "missed_fraud_amount": 4225.64,
+    "false_positive_cost": 1985.0,
+    "total_system_cost": 6210.64,
+    "net_savings": 2817858.42,
+    "savings_rate": 0.9978,
+    "n_allow": 5421,
+    "n_otp": 430,
+    "n_review": 9,
+    "n_block": 140
+  },
+  "ablations": [
+    {
+      "pr_auc": 0.5926,
+      "roc_auc": 0.8807,
+      "recall_at_1pct_fpr": 0.5177,
+      "recall_at_0_5pct_fpr": 0.5177,
+      "precision_at_50": 1.0,
+      "precision_at_100": 0.74,
+      "precision_at_200": 0.43,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2642393.01,
+      "missed_fraud_amount": 181676.05,
+      "false_positive_cost": 7607.0,
+      "total_system_cost": 189283.05,
+      "net_savings": 2634786.01,
+      "savings_rate": 0.933,
+      "n_allow": 5617,
+      "n_otp": 16,
+      "n_review": 303,
+      "n_block": 64,
+      "variant": "1. Rules Only",
+      "thresholds": {
+        "otp": 0.15,
+        "review": 0.35,
+        "block": 0.65
+      }
+    },
+    {
+      "pr_auc": 0.7881,
+      "roc_auc": 0.9638,
+      "recall_at_1pct_fpr": 0.7589,
+      "recall_at_0_5pct_fpr": 0.7021,
+      "precision_at_50": 1.0,
+      "precision_at_100": 0.87,
+      "precision_at_200": 0.555,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 1631812.2,
+      "missed_fraud_amount": 1192256.86,
+      "false_positive_cost": 9598.0,
+      "total_system_cost": 1201854.86,
+      "net_savings": 1622214.2,
+      "savings_rate": 0.5744,
+      "n_allow": 5545,
+      "n_otp": 199,
+      "n_review": 110,
+      "n_block": 146,
+      "variant": "2. Baseline LogReg (Tx Only)",
+      "thresholds": {
+        "otp": 0.3,
+        "review": 0.65,
+        "block": 0.95
+      }
+    },
+    {
+      "pr_auc": 0.9205,
+      "roc_auc": 0.9956,
+      "recall_at_1pct_fpr": 0.8936,
+      "recall_at_0_5pct_fpr": 0.8511,
+      "precision_at_50": 1.0,
+      "precision_at_100": 0.98,
+      "precision_at_200": 0.645,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2417450.8,
+      "missed_fraud_amount": 406618.26,
+      "false_positive_cost": 3969.0,
+      "total_system_cost": 410587.26,
+      "net_savings": 2413481.8,
+      "savings_rate": 0.8546,
+      "n_allow": 5798,
+      "n_otp": 22,
+      "n_review": 43,
+      "n_block": 137,
+      "variant": "3. Baseline LogReg (All Features)",
+      "thresholds": {
+        "otp": 0.2,
+        "review": 0.35,
+        "block": 0.9
+      }
+    },
+    {
+      "pr_auc": 0.9646,
+      "roc_auc": 0.9984,
+      "recall_at_1pct_fpr": 0.9645,
+      "recall_at_0_5pct_fpr": 0.9433,
+      "precision_at_50": 1.0,
+      "precision_at_100": 0.99,
+      "precision_at_200": 0.68,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2817070.72,
+      "missed_fraud_amount": 6998.34,
+      "false_positive_cost": 5540.0,
+      "total_system_cost": 12538.34,
+      "net_savings": 2811530.72,
+      "savings_rate": 0.9956,
+      "n_allow": 5527,
+      "n_otp": 270,
+      "n_review": 44,
+      "n_block": 159,
+      "variant": "4. GBDT (hist_gbdt, Tx Only)",
+      "thresholds": {
+        "otp": 0.15,
+        "review": 0.65,
+        "block": 0.8
+      }
+    },
+    {
+      "pr_auc": 0.9903,
+      "roc_auc": 0.9997,
+      "recall_at_1pct_fpr": 0.9858,
+      "recall_at_0_5pct_fpr": 0.9787,
+      "precision_at_50": 1.0,
+      "precision_at_100": 1.0,
+      "precision_at_200": 0.695,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2811096.18,
+      "missed_fraud_amount": 12972.88,
+      "false_positive_cost": 1091.0,
+      "total_system_cost": 14063.88,
+      "net_savings": 2810005.18,
+      "savings_rate": 0.995,
+      "n_allow": 5840,
+      "n_otp": 8,
+      "n_review": 13,
+      "n_block": 139,
+      "variant": "5. GBDT (hist_gbdt, Full Features)",
+      "thresholds": {
+        "otp": 0.25,
+        "review": 0.35,
+        "block": 0.75
+      }
+    },
+    {
+      "pr_auc": 0.5156,
+      "roc_auc": 0.9876,
+      "recall_at_1pct_fpr": 0.0,
+      "recall_at_0_5pct_fpr": 0.0,
+      "precision_at_50": 0.48,
+      "precision_at_100": 0.54,
+      "precision_at_200": 0.54,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2822637.9,
+      "missed_fraud_amount": 1431.16,
+      "false_positive_cost": 39053.0,
+      "total_system_cost": 40484.16,
+      "net_savings": 2783584.9,
+      "savings_rate": 0.9857,
+      "n_allow": 3712,
+      "n_otp": 1539,
+      "n_review": 449,
+      "n_block": 300,
+      "variant": "6. Isolation Forest Only",
+      "thresholds": {
+        "otp": 0.5,
+        "review": 0.75,
+        "block": 0.95
+      }
+    },
+    {
+      "pr_auc": 0.9909,
+      "roc_auc": 0.9997,
+      "recall_at_1pct_fpr": 0.9858,
+      "recall_at_0_5pct_fpr": 0.9858,
+      "precision_at_50": 1.0,
+      "precision_at_100": 1.0,
+      "precision_at_200": 0.695,
+      "total_fraud_amount": 2824069.06,
+      "fraud_prevented_amount": 2819843.42,
+      "missed_fraud_amount": 4225.64,
+      "false_positive_cost": 1985.0,
+      "total_system_cost": 6210.64,
+      "net_savings": 2817858.42,
+      "savings_rate": 0.9978,
+      "n_allow": 5421,
+      "n_otp": 430,
+      "n_review": 9,
+      "n_block": 140,
+      "variant": "7. Full AI Agent (Rules + GBDT + IsoForest)",
+      "thresholds": {
+        "otp": 0.15,
+        "review": 0.5,
+        "block": 0.7
+      }
+    }
+  ],
+  "train_vs_test_drift": {
+    "overall_status": "CRITICAL",
+    "n_reference": 18000,
+    "n_current": 6000,
+    "n_critical": 2,
+    "n_warning": 3,
+    "features": [
+      {
+        "feature": "risk_score",
+        "psi": 0.7152,
+        "status": "CRITICAL",
+        "ref_mean": 0.0473,
+        "cur_mean": 0.0788
+      },
+      {
+        "feature": "dest_in_degree",
+        "psi": 0.3573,
+        "status": "CRITICAL",
+        "ref_mean": 1.4572,
+        "cur_mean": 2.8952
+      },
+      {
+        "feature": "amount_zscore",
+        "psi": 0.1744,
+        "status": "WARNING",
+        "ref_mean": 0.449,
+        "cur_mean": 0.3528
+      },
+      {
+        "feature": "balance_drain_ratio",
+        "psi": 0.1426,
+        "status": "WARNING",
+        "ref_mean": 0.2356,
+        "cur_mean": 0.3142
+      },
+      {
+        "feature": "ml_score",
+        "psi": 0.1258,
+        "status": "WARNING",
+        "ref_mean": 0.0181,
+        "cur_mean": 0.0271
+      },
+      {
+        "feature": "is_new_recipient",
+        "psi": 0.0882,
+        "status": "OK",
+        "ref_mean": 0.3006,
+        "cur_mean": 0.1753
+      },
+      {
+        "feature": "device_shared_accounts",
+        "psi": 0.0106,
+        "status": "OK",
+        "ref_mean": 0.0088,
+        "cur_mean": 0.0445
+      },
+      {
+        "feature": "is_new_device",
+        "psi": 0.0102,
+        "status": "OK",
+        "ref_mean": 0.0614,
+        "cur_mean": 0.0395
+      },
+      {
+        "feature": "orig_tx_count_24h",
+        "psi": 0.0073,
+        "status": "OK",
+        "ref_mean": 1.3903,
+        "cur_mean": 1.4958
+      },
+      {
+        "feature": "amount",
+        "psi": 0.0038,
+        "status": "OK",
+        "ref_mean": 1585.1,
+        "cur_mean": 1980.4108
+      },
+      {
+        "feature": "channel_API",
+        "psi": 0.0025,
+        "status": "OK",
+        "ref_mean": 0.0105,
+        "cur_mean": 0.0162
+      },
+      {
+        "feature": "orig_tx_count_1h",
+        "psi": 0.0009,
+        "status": "OK",
+        "ref_mean": 0.084,
+        "cur_mean": 0.092
+      }
+    ]
+  }
+}

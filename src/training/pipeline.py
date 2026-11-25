@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import joblib
@@ -16,8 +15,18 @@ from src.agent.thresholds import optimize_thresholds_by_cost
 from src.config import load_config, resolve_path
 from src.data.simulator import load_or_generate_dataset
 from src.evaluation.ablation import run_ablation_study
-from src.features.engineering import build_features_chronological, time_based_split
-from src.features.online_store import ALL_FEATURE_NAMES
+from src.evaluation.metrics import evaluate_predictions
+from src.features.engineering import (
+    build_features_chronological,
+    build_initial_feature_store,
+    sort_transactions_deterministically,
+    time_based_split,
+)
+from src.features.online_store import (
+    ALL_FEATURE_NAMES,
+    FEATURE_CONTRACT,
+    normalize_event_datetime,
+)
 from src.models.anomaly import FraudAnomalyDetector
 from src.models.supervised import FraudGBDTModel
 from src.monitoring.drift import compute_drift_report
@@ -28,7 +37,7 @@ def run_training_pipeline(
     cfg: dict[str, Any] | None = None,
     force_regenerate_data: bool = False,
 ) -> dict[str, Any]:
-    """Execute full reproducible training, evaluation, ablation, and artifact export pipeline."""
+    """Execute full reproducible training, evaluation, ablation, and clean artifact export pipeline."""
     cfg = cfg or load_config()
     artifacts_dir = resolve_path(cfg["paths"]["artifacts_dir"])
     artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -37,12 +46,13 @@ def run_training_pipeline(
 
     # 1. Load or simulate dataset
     raw_df = load_or_generate_dataset(cfg=cfg, force_regenerate=force_regenerate_data)
+    raw_sorted = sort_transactions_deterministically(raw_df, deduplicate_retries=True)
 
-    # 2. Strictly chronological leak-free feature engineering
-    feat_df, online_store = build_features_chronological(
-        raw_df,
+    # 2. Strictly chronological leak-free offline feature engineering (never exported as live API store!)
+    feat_df = build_features_chronological(
+        raw_sorted,
         mule_in_degree_threshold=cfg["rules"]["mule_in_degree_threshold"],
-        return_store=True,
+        return_store=False,
     )
     feat_df.to_parquet(processed_path, index=False)
 
@@ -52,6 +62,27 @@ def run_training_pipeline(
         train_frac=cfg["split"]["train_frac"],
         val_frac=cfg["split"]["val_frac"],
     )
+
+    # Build optional point-in-time historical warm-up store ONLY from pre-test data (train + val)
+    val_max_dt = normalize_event_datetime(val_df.iloc[-1].to_dict())
+    test_min_dt = normalize_event_datetime(test_df.iloc[0].to_dict())
+    pre_test_count = len(train_df) + len(val_df)
+    pre_test_raw_df = raw_sorted.iloc[:pre_test_count].copy()
+
+    scoring_cfg = cfg.get("scoring", {})
+    pre_test_store = build_initial_feature_store(
+        pre_test_raw_df,
+        as_of_timestamp=val_max_dt,
+        mule_in_degree_threshold=cfg["rules"]["mule_in_degree_threshold"],
+        max_sender_out_of_order_sec=scoring_cfg.get("max_sender_out_of_order_seconds", 300.0),
+        max_global_staleness_sec=scoring_cfg.get("max_global_staleness_seconds", 86400.0),
+        state_origin="pre_test_warmup",
+    )
+
+    # Remove legacy full-dataset feature store artifact if present so API can never accidentally load it
+    legacy_store_path = artifacts_dir / "online_feature_store.joblib"
+    if legacy_store_path.exists():
+        legacy_store_path.unlink()
 
     X_train = train_df[ALL_FEATURE_NAMES]
     y_train = train_df["isFraud"].values
@@ -104,7 +135,7 @@ def run_training_pipeline(
     agent.t_review = best_thresholds["review"]
     agent.t_block = best_thresholds["block"]
 
-    # 8. Run Ablation Study on held-out future Test Set
+    # 8. Run Ablation Study & baseline evaluation on held-out future Test Set
     ablations = run_ablation_study(
         train_df=train_df,
         val_df=val_df,
@@ -116,11 +147,19 @@ def run_training_pipeline(
         decision_agent=agent,
     )
 
-    # 9. Compute Train-vs-Test Drift Report (detecting late-period concept drift!)
+    # 9. Compute Train-vs-Test Drift Report & Baseline Test Metrics
     test_ml = gbdt_model.predict_score(X_test)
     test_rule = np.array(rule_engine.score_batch(test_df), dtype=float)
     test_anom = anomaly_detector.predict_anomaly_score(X_test)
     test_risk = np.asarray(agent.combine_scores(test_ml, test_rule, test_anom), dtype=float)
+
+    baseline_test_metrics = evaluate_predictions(
+        y_true=y_test,
+        y_score=test_risk,
+        amounts=test_df["amount"].values,
+        thresholds=best_thresholds,
+        costs_cfg=cfg["agent"]["costs"],
+    )
 
     ref_monitor_df = train_df[ALL_FEATURE_NAMES].copy()
     ref_monitor_df["ml_score"] = gbdt_model.predict_score(X_train)
@@ -160,20 +199,56 @@ def run_training_pipeline(
         bins=cfg["monitoring"]["psi_bins"],
     )
 
-    # 10. Save all production artifacts
+    # 10. Save production model artifacts, pre-test warm-up snapshot, and holdout manifest
+    trained_at = datetime.now(timezone.utc).isoformat()
     joblib.dump(gbdt_model, artifacts_dir / "gbdt_model.joblib")
     joblib.dump(anomaly_detector, artifacts_dir / "anomaly_detector.joblib")
     joblib.dump(background_median, artifacts_dir / "background_median.joblib")
-    joblib.dump(online_store, artifacts_dir / "online_feature_store.joblib")
+    joblib.dump(pre_test_store, artifacts_dir / "initial_feature_store_pre_test.joblib")
     ref_monitor_df[monitored_cols].sample(min(5000, len(ref_monitor_df)), random_state=42).to_parquet(
         artifacts_dir / "reference_distribution.parquet", index=False
     )
 
+    train_max_dt = normalize_event_datetime(train_df.iloc[-1].to_dict())
+    val_min_dt = normalize_event_datetime(val_df.iloc[0].to_dict())
+    test_max_dt = normalize_event_datetime(test_df.iloc[-1].to_dict())
+
+    holdout_manifest = {
+        "created_at": trained_at,
+        "train_rows": int(len(train_df)),
+        "val_rows": int(len(val_df)),
+        "test_rows": int(len(test_df)),
+        "train_max_timestamp": train_max_dt.isoformat(),
+        "val_min_timestamp": val_min_dt.isoformat(),
+        "val_max_timestamp": val_max_dt.isoformat(),
+        "test_min_timestamp": test_min_dt.isoformat(),
+        "test_max_timestamp": test_max_dt.isoformat(),
+        "val_tx_ids": val_df["tx_id"].astype(str).tolist(),
+        "test_tx_ids": test_df["tx_id"].astype(str).tolist(),
+    }
+    with open(artifacts_dir / "holdout_manifest.json", "w", encoding="utf-8") as f:
+        json.dump(holdout_manifest, f, indent=2, ensure_ascii=False)
+
     metadata = {
-        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "trained_at": trained_at,
         "model_backend": gbdt_model.backend_name,
         "feature_names": ALL_FEATURE_NAMES,
+        "feature_contract": FEATURE_CONTRACT,
         "monitored_columns": monitored_cols,
+        "initial_state_snapshot": {
+            "artifact": "initial_feature_store_pre_test.joblib",
+            "state_origin": pre_test_store.state_origin,
+            "as_of_timestamp": pre_test_store.as_of_timestamp,
+            "ingested_events": pre_test_store.ingested_events,
+            "contains_test_events": False,
+        },
+        "split_boundaries": {
+            "train_max_timestamp": train_max_dt.isoformat(),
+            "val_min_timestamp": val_min_dt.isoformat(),
+            "val_max_timestamp": val_max_dt.isoformat(),
+            "test_min_timestamp": test_min_dt.isoformat(),
+            "test_max_timestamp": test_max_dt.isoformat(),
+        },
         "dataset_summary": {
             "total_rows": int(len(feat_df)),
             "train_rows": int(len(train_df)),
@@ -182,10 +257,11 @@ def run_training_pipeline(
             "train_fraud_rate": round(float(y_train.mean()), 5),
             "val_fraud_rate": round(float(y_val.mean()), 5),
             "test_fraud_rate": round(float(y_test.mean()), 5),
-            "scenario_counts": raw_df["fraud_scenario"].value_counts().to_dict(),
+            "scenario_counts": raw_sorted["fraud_scenario"].value_counts().to_dict(),
         },
         "optimized_thresholds": best_thresholds,
         "validation_cost_metrics": val_cost_metrics,
+        "baseline_test_metrics": baseline_test_metrics,
         "ablations": ablations,
         "train_vs_test_drift": drift_report,
     }
@@ -198,11 +274,3 @@ def run_training_pipeline(
 if __name__ == "__main__":
     meta = run_training_pipeline()
     print(f"Training complete ({meta['model_backend']}). Optimized thresholds: {meta['optimized_thresholds']}")
-    print("\n--- Ablation Study (Test Set) ---")
-    for row in meta["ablations"]:
-        print(
-            f"{row['variant']:<46} | PR-AUC={row['pr_auc']:.4f} | ROC-AUC={row['roc_auc']:.4f} "
-            f"| Rec@1%FPR={row['recall_at_1pct_fpr']:.4f} | P@100={row['precision_at_100']:.4f} "
-            f"| NetSavings=${row['net_savings']:,.0f}"
-        )
-    print(f"\nTrain vs Test Drift Status: {meta['train_vs_test_drift']['overall_status']}")

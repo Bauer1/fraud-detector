@@ -5,13 +5,10 @@ __pycache__/
 venv/
 .pytest_cache/
 .ipynb_checkpoints/
-data/raw/*.parquet
-data/processed/*.parquet
+# Local operational databases can contain real transaction and analyst data.
 data/*.db
 data/*.sqlite
 data/*.sqlite3
-models/artifacts/*
-!models/artifacts/.gitkeep
 .env
 .env.*
 !.env.example

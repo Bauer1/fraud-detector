@@ -79,6 +79,16 @@ monitoring:
   psi_critical_threshold: 0.25
   psi_bins: 10
 
+scoring:
+  auto_train_on_startup: false             # Обучение и запуск API разделены
+  initial_state_mode: "empty"              # "empty" | "operational_db" | "pre_test_warmup" (без утечки из теста)
+  max_sender_out_of_order_seconds: 300.0   # Отклонять события клиента старше 5 минут от его последнего события
+  max_global_staleness_seconds: 86400.0    # Отклонять события старше 24 часов от глобального watermark потока
+  max_idempotency_cache_size: 50000
+
+retraining:
+  exclude_holdout_feedback: true           # Запрещать включение кейсов из val/test holdout в дообучение
+
 llm:
   enabled: false                # Set true + OPENAI_API_KEY env var for live LLM summaries
   model: "gpt-4o-mini"

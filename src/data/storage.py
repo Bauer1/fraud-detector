@@ -1,9 +1,8 @@
-"""Operational storage layer: SQLAlchemy DB for alerts, feedback, and live stream metrics."""
+"""Operational storage layer: SQLAlchemy DB for alerts, feedback, idempotency, and live stream metrics."""
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -15,22 +14,31 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    asc,
     create_engine,
     desc,
+    inspect,
+    text,
 )
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from src.config import load_config, resolve_path
+from src.data.schemas import ensure_utc_datetime
 
 Base = declarative_base()
+
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    return ensure_utc_datetime(dt)
 
 
 class ScoredTransactionORM(Base):
     __tablename__ = "scored_transactions"
 
-    tx_id = Column(String(64), primary_key=True, index=True)
+    tx_id = Column(String(128), primary_key=True, index=True)
     step = Column(Integer, nullable=False, index=True)
-    timestamp = Column(DateTime, nullable=True)
+    timestamp = Column(DateTime(timezone=True), nullable=True)
     tx_type = Column(String(32), nullable=False)
     amount = Column(Float, nullable=False)
     name_orig = Column(String(64), nullable=False, index=True)
@@ -38,6 +46,7 @@ class ScoredTransactionORM(Base):
     device_id = Column(String(64), nullable=False)
     channel = Column(String(32), nullable=False)
     ip_country = Column(String(16), nullable=False, default="RU")
+    raw_payload_json = Column(Text, nullable=False, default="{}")
 
     # Scoring outputs
     action = Column(String(16), nullable=False, index=True)
@@ -55,9 +64,9 @@ class ScoredTransactionORM(Base):
     analyst_label = Column(Boolean, nullable=True, index=True)
     analyst_id = Column(String(64), nullable=True)
     analyst_notes = Column(Text, nullable=True)
-    labeled_at = Column(DateTime, nullable=True)
+    labeled_at = Column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
 class StorageManager:
@@ -73,9 +82,29 @@ class StorageManager:
             url = f"sqlite:///{abs_path.as_posix()}"
 
         connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-        self.engine = create_engine(url, connect_args=connect_args, future=True)
+        engine_kwargs: dict[str, Any] = {"connect_args": connect_args, "future": True}
+        if url == "sqlite:///:memory:":
+            engine_kwargs["poolclass"] = StaticPool
+        self.engine = create_engine(url, **engine_kwargs)
         Base.metadata.create_all(self.engine)
+        self._ensure_backward_compatible_columns()
         self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
+
+    def close(self) -> None:
+        """Dispose underlying SQLAlchemy engine connections cleanly."""
+        self.engine.dispose()
+
+    def _ensure_backward_compatible_columns(self) -> None:
+        """Safely migrate legacy SQLite tables missing newly added columns."""
+        inspector = inspect(self.engine)
+        if not inspector.has_table("scored_transactions"):
+            return
+        existing_cols = {col["name"] for col in inspector.get_columns("scored_transactions")}
+        if "raw_payload_json" not in existing_cols:
+            with self.engine.begin() as conn:
+                conn.execute(
+                    text("ALTER TABLE scored_transactions ADD COLUMN raw_payload_json TEXT NOT NULL DEFAULT '{}'")
+                )
 
     def save_scored_transaction(
         self,
@@ -87,8 +116,17 @@ class StorageManager:
             ts = tx.get("timestamp")
             if isinstance(ts, str):
                 ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            ts = _as_utc(ts)
+
+            raw_payload = {
+                "oldbalanceOrg": float(tx.get("oldbalanceOrg", 0.0)),
+                "newbalanceOrig": float(tx.get("newbalanceOrig", 0.0)),
+                "oldbalanceDest": float(tx.get("oldbalanceDest", 0.0)),
+                "newbalanceDest": float(tx.get("newbalanceDest", 0.0)),
+            }
+
             rec = ScoredTransactionORM(
-                tx_id=tx["tx_id"],
+                tx_id=str(tx["tx_id"]),
                 step=int(tx["step"]),
                 timestamp=ts,
                 tx_type=str(tx["type"]),
@@ -97,7 +135,8 @@ class StorageManager:
                 name_dest=str(tx["nameDest"]),
                 device_id=str(tx.get("device_id", "DEV_UNKNOWN")),
                 channel=str(tx.get("channel", "MOBILE")),
-                ip_country=str(tx.get("ip_country", "RU")),
+                ip_country=str(tx.get("ip_country", "RU")).upper(),
+                raw_payload_json=json.dumps(raw_payload, ensure_ascii=False),
                 action=str(decision["action"]),
                 risk_score=float(decision["risk_score"]),
                 ml_score=float(decision["ml_score"]),
@@ -154,6 +193,39 @@ class StorageManager:
             rec = session.get(ScoredTransactionORM, tx_id)
             return self._row_to_dict(rec) if rec else None
 
+    def get_operational_history(self, as_of: datetime | None = None) -> list[dict[str, Any]]:
+        """Return scored operational transactions ordered chronologically up to `as_of` for clean state warm-up."""
+        cutoff = _as_utc(as_of)
+        with self.SessionLocal() as session:
+            rows = (
+                session.query(ScoredTransactionORM)
+                .order_by(asc(ScoredTransactionORM.timestamp), asc(ScoredTransactionORM.step), asc(ScoredTransactionORM.tx_id))
+                .all()
+            )
+            events: list[dict[str, Any]] = []
+            for r in rows:
+                ts_utc = _as_utc(r.timestamp)
+                if cutoff is not None and ts_utc is not None and ts_utc > cutoff:
+                    continue
+                raw_balances = json.loads(r.raw_payload_json or "{}")
+                events.append({
+                    "tx_id": r.tx_id,
+                    "step": r.step,
+                    "timestamp": ts_utc,
+                    "type": r.tx_type,
+                    "amount": r.amount,
+                    "nameOrig": r.name_orig,
+                    "oldbalanceOrg": float(raw_balances.get("oldbalanceOrg", 0.0)),
+                    "newbalanceOrig": float(raw_balances.get("newbalanceOrig", 0.0)),
+                    "nameDest": r.name_dest,
+                    "oldbalanceDest": float(raw_balances.get("oldbalanceDest", 0.0)),
+                    "newbalanceDest": float(raw_balances.get("newbalanceDest", 0.0)),
+                    "device_id": r.device_id,
+                    "channel": r.channel,
+                    "ip_country": r.ip_country,
+                })
+            return events
+
     def get_recent_features_df(self, limit: int = 5000) -> pd.DataFrame:
         """Return DataFrame of recent scored transactions' features and scores for drift monitoring."""
         with self.SessionLocal() as session:
@@ -177,7 +249,7 @@ class StorageManager:
             return pd.DataFrame(records)
 
     def get_labeled_feedback_df(self) -> pd.DataFrame:
-        """Return all analyst-labeled cases with features for retraining."""
+        """Return all analyst-labeled cases with features and temporal metadata for retraining."""
         with self.SessionLocal() as session:
             rows = (
                 session.query(ScoredTransactionORM)
@@ -189,8 +261,10 @@ class StorageManager:
             records = []
             for r in rows:
                 feat = json.loads(r.features_json or "{}")
+                ts_utc = _as_utc(r.timestamp)
                 feat["tx_id"] = r.tx_id
                 feat["step"] = r.step
+                feat["timestamp"] = ts_utc.isoformat() if ts_utc else None
                 feat["amount"] = r.amount
                 feat["isFraud"] = int(bool(r.analyst_label))
                 records.append(feat)
@@ -237,14 +311,21 @@ class StorageManager:
 
     @staticmethod
     def _row_to_dict(r: ScoredTransactionORM) -> dict[str, Any]:
+        ts_utc = _as_utc(r.timestamp)
+        created_utc = _as_utc(r.created_at)
+        raw_balances = json.loads(r.raw_payload_json or "{}")
         return {
             "tx_id": r.tx_id,
             "step": r.step,
-            "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            "timestamp": ts_utc.isoformat() if ts_utc else None,
             "type": r.tx_type,
             "amount": r.amount,
             "nameOrig": r.name_orig,
+            "oldbalanceOrg": float(raw_balances.get("oldbalanceOrg", 0.0)),
+            "newbalanceOrig": float(raw_balances.get("newbalanceOrig", 0.0)),
             "nameDest": r.name_dest,
+            "oldbalanceDest": float(raw_balances.get("oldbalanceDest", 0.0)),
+            "newbalanceDest": float(raw_balances.get("newbalanceDest", 0.0)),
             "device_id": r.device_id,
             "channel": r.channel,
             "ip_country": r.ip_country,
@@ -261,5 +342,5 @@ class StorageManager:
             "analyst_label": r.analyst_label,
             "analyst_id": r.analyst_id,
             "analyst_notes": r.analyst_notes,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "created_at": created_utc.isoformat() if created_utc else None,
         }

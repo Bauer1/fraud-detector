@@ -13,6 +13,7 @@ import httpx
 import pandas as pd
 
 from src.config import load_config, resolve_path
+from src.features.engineering import sort_transactions_deterministically
 
 
 def replay_stream(
@@ -28,7 +29,7 @@ def replay_stream(
     if not raw_path.exists():
         raise FileNotFoundError(f"Raw data not found at {raw_path}. Run training pipeline first.")
 
-    df = pd.read_parquet(raw_path).sort_values("timestamp").reset_index(drop=True)
+    df = sort_transactions_deterministically(pd.read_parquet(raw_path), deduplicate_retries=True)
     test_start = int(len(df) * (cfg["split"]["train_frac"] + cfg["split"]["val_frac"]))
     test_df = df.iloc[test_start : test_start + n_events].copy()
 
